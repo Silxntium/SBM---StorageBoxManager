@@ -67,15 +67,15 @@ enum BoxTint: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var label: String {
         switch self {
-        case .blue: String(localized: "Blau")
-        case .purple: String(localized: "Violett")
+        case .blue: String(localized: "Blue")
+        case .purple: String(localized: "Purple")
         case .pink: String(localized: "Pink")
-        case .red: String(localized: "Rot")
+        case .red: String(localized: "Red")
         case .orange: String(localized: "Orange")
-        case .yellow: String(localized: "Gelb")
-        case .green: String(localized: "Grün")
-        case .teal: String(localized: "Türkis")
-        case .graphite: String(localized: "Grafit")
+        case .yellow: String(localized: "Yellow")
+        case .green: String(localized: "Green")
+        case .teal: String(localized: "Teal")
+        case .graphite: String(localized: "Graphite")
         }
     }
 }

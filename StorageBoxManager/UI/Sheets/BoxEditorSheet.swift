@@ -32,22 +32,22 @@ struct BoxEditorSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             Form {
                 Section {
-                    TextField("Name", text: $displayName, prompt: Text("z. B. Fotos"))
-                    LabeledContent("Darstellung") {
+                    TextField("Name", text: $displayName, prompt: Text("e.g. Photos"))
+                    LabeledContent("Appearance") {
                         HStack(spacing: 12) {
                             symbolPicker
                             tintPicker
                         }
                     }
                 } header: {
-                    Text("Anzeige")
+                    Text("Display")
                 } footer: {
-                    Text("Dieser Name gilt nur in dieser App — der Server behält seinen Hostnamen.")
+                    Text("This name is only used in this app — the server keeps its own hostname.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
-                Section("Verbindung") {
+                Section("Connection") {
                     TextField("Server", text: $host, prompt: Text("u123456.your-storagebox.de"))
                         .onChange(of: host) { _, new in
                             let normalized = AppModel.normalizeHost(new)
@@ -56,11 +56,11 @@ struct BoxEditorSheet: View {
                                 username = AppModel.suggestedUsername(forHost: normalized)
                             }
                         }
-                    TextField("Benutzername", text: $username, prompt: Text("u123456"))
+                    TextField("Username", text: $username, prompt: Text("u123456"))
                     SecureField(
-                        "Passwort",
+                        "Password",
                         text: $password,
-                        prompt: Text(isEditing ? "unverändert lassen" : "Passwort")
+                        prompt: Text(isEditing ? "leave unchanged" : "Password")
                     )
                 }
             }
@@ -71,10 +71,10 @@ struct BoxEditorSheet: View {
             HStack(spacing: 12) {
                 testStatusView
                 Spacer()
-                Button("Abbrechen", role: .cancel) { dismiss() }
-                Button("Verbindung testen") { runTest() }
+                Button("Cancel", role: .cancel) { dismiss() }
+                Button("Test Connection") { runTest() }
                     .disabled(!canSave || test == .running)
-                Button(isEditing ? "Sichern" : "Hinzufügen") { save() }
+                Button(isEditing ? "Save" : "Add") { save() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!canSave)
             }
@@ -82,7 +82,7 @@ struct BoxEditorSheet: View {
         }
         .frame(width: 520)
         .onAppear(perform: loadExisting)
-        .alert("Sichern fehlgeschlagen", isPresented: .constant(saveError != nil)) {
+        .alert("Couldn't Save", isPresented: .constant(saveError != nil)) {
             Button("OK") { saveError = nil }
         } message: {
             Text(saveError ?? "")
@@ -92,7 +92,7 @@ struct BoxEditorSheet: View {
     // MARK: - Pieces
 
     private var symbolPicker: some View {
-        Picker("Symbol", selection: $symbolName) {
+        Picker("Icon", selection: $symbolName) {
             ForEach(StorageBox.symbolChoices, id: \.self) { name in
                 Image(systemName: name).tag(name)
             }
@@ -127,10 +127,10 @@ struct BoxEditorSheet: View {
         case .running:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text("Teste…").foregroundStyle(.secondary)
+                Text("Testing…").foregroundStyle(.secondary)
             }
         case .succeeded:
-            Label("Verbindung steht", systemImage: "checkmark.circle.fill")
+            Label("Connected", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
         case .failed(let message):
             Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -218,7 +218,7 @@ struct BoxEditorSheet: View {
     private static func message(for error: any Error) -> String {
         if let backendError = error as? BackendError {
             let suggestion = backendError.recoverySuggestion.map { " \($0)" } ?? ""
-            return (backendError.errorDescription ?? "Unbekannter Fehler") + suggestion
+            return (backendError.errorDescription ?? "Unknown error") + suggestion
         }
         return error.localizedDescription
     }

@@ -16,44 +16,44 @@ enum BackendError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .invalidHost(let host):
-            String(localized: "„\(host)“ ist keine gültige Adresse.")
+            String(localized: "\"\(host)\" is not a valid address.")
         case .missingPassword:
-            String(localized: "Für diese Box ist kein Passwort hinterlegt.")
+            String(localized: "No password saved for this box.")
         case .authenticationFailed:
-            String(localized: "Anmeldung fehlgeschlagen.")
+            String(localized: "Login failed.")
         case .forbidden:
-            String(localized: "Der Server hat den Zugriff verweigert.")
+            String(localized: "The server refused access.")
         case .notFound(let path):
-            String(localized: "„\(path)“ existiert auf dem Server nicht.")
+            String(localized: "\"\(path)\" doesn't exist on the server.")
         case .alreadyExists(let name):
-            String(localized: "„\(name)“ existiert bereits.")
+            String(localized: "\"\(name)\" already exists.")
         case .parentMissing(let path):
-            String(localized: "Der übergeordnete Ordner von „\(path)“ existiert nicht.")
+            String(localized: "The parent folder of \"\(path)\" doesn't exist.")
         case .outOfSpace:
-            String(localized: "Auf der Box ist kein Speicherplatz mehr frei.")
+            String(localized: "The box is out of storage space.")
         case .malformedResponse(let detail):
-            String(localized: "Unerwartete Antwort vom Server: \(detail)")
+            String(localized: "Unexpected response from the server: \(detail)")
         case .unexpectedStatus(let code):
-            String(localized: "Der Server hat mit Status \(code) geantwortet.")
+            String(localized: "The server responded with status \(code).")
         case .transport(let detail):
-            String(localized: "Verbindungsfehler: \(detail)")
+            String(localized: "Connection error: \(detail)")
         }
     }
 
     var recoverySuggestion: String? {
         switch self {
         case .authenticationFailed:
-            String(localized: "Benutzername und Passwort in den Box-Einstellungen prüfen.")
+            String(localized: "Check the username and password in the box settings.")
         case .invalidHost:
-            String(localized: "Erwartet wird ein Hostname wie „u123456.your-storagebox.de“.")
+            String(localized: "Expected a hostname like \"u123456.your-storagebox.de\".")
         case .missingPassword:
-            String(localized: "Die Box bearbeiten und das Passwort erneut eingeben.")
+            String(localized: "Edit the box and re-enter the password.")
         case .alreadyExists:
-            String(localized: "Einen anderen Namen wählen.")
+            String(localized: "Choose a different name.")
         case .outOfSpace:
-            String(localized: "Auf der Box Platz schaffen oder den Speicher erweitern.")
+            String(localized: "Free up space on the box, or upgrade its storage.")
         case .forbidden:
-            String(localized: "Prüfen, ob das Unterkonto Schreibrechte auf diesen Pfad hat.")
+            String(localized: "Check whether this sub-account has write access to this path.")
         default:
             nil
         }

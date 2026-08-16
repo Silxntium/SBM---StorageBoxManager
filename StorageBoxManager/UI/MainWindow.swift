@@ -26,15 +26,15 @@ private struct NoBoxSelectedView: View {
     var body: some View {
         if model.store.boxes.isEmpty {
             ContentUnavailableView {
-                Label("Noch keine Box eingerichtet", systemImage: "externaldrive.badge.plus")
+                Label("No Box Set Up Yet", systemImage: "externaldrive.badge.plus")
             } description: {
-                Text("Füge deine Hetzner Storage Boxen hinzu und gib jeder einen Namen, an dem du sie wiedererkennst.")
+                Text("Add your storage boxes and give each one a name you'll recognize.")
             }
         } else {
             ContentUnavailableView(
-                "Keine Box ausgewählt",
+                "No Box Selected",
                 systemImage: "sidebar.left",
-                description: Text("Wähle links eine Box aus, um ihre Dateien zu sehen.")
+                description: Text("Choose a box on the left to see its files.")
             )
         }
     }

@@ -61,7 +61,7 @@ final class BoxStore {
         do {
             boxes = try JSONDecoder().decode([StorageBox].self, from: data)
         } catch {
-            logger.error("boxes.json konnte nicht gelesen werden: \(error.localizedDescription)")
+            logger.error("failed to read boxes.json: \(error.localizedDescription)")
         }
     }
 
@@ -71,7 +71,7 @@ final class BoxStore {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(boxes).write(to: fileURL, options: .atomic)
         } catch {
-            logger.error("boxes.json konnte nicht geschrieben werden: \(error.localizedDescription)")
+            logger.error("failed to write boxes.json: \(error.localizedDescription)")
         }
     }
 }

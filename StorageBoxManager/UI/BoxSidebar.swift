@@ -32,12 +32,12 @@ struct BoxSidebar: View {
             .onMove { model.store.move(fromOffsets: $0, toOffset: $1) }
         }
         .listStyle(.sidebar)
-        .navigationTitle("Storage Boxen")
+        .navigationTitle("Storage Boxes")
         .safeAreaInset(edge: .bottom) {
             Button {
                 editor = .new
             } label: {
-                Label("Box hinzufügen", systemImage: "plus")
+                Label("Add Box", systemImage: "plus")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.accessoryBar)
@@ -53,23 +53,23 @@ struct BoxSidebar: View {
             }
         }
         .confirmationDialog(
-            "„\(boxPendingRemoval?.resolvedName ?? "")“ entfernen?",
+            "Remove \"\(boxPendingRemoval?.resolvedName ?? "")\"?",
             isPresented: Binding(
                 get: { boxPendingRemoval != nil },
                 set: { if !$0 { boxPendingRemoval = nil } }
             ),
             titleVisibility: .visible
         ) {
-            Button("Entfernen", role: .destructive) {
+            Button("Remove", role: .destructive) {
                 if let box = boxPendingRemoval {
                     if model.selectedBoxID == box.id { model.selectedBoxID = nil }
                     model.store.remove(box)
                 }
                 boxPendingRemoval = nil
             }
-            Button("Abbrechen", role: .cancel) { boxPendingRemoval = nil }
+            Button("Cancel", role: .cancel) { boxPendingRemoval = nil }
         } message: {
-            Text("Die Box wird nur aus dieser App entfernt. Auf dem Server wird nichts gelöscht.")
+            Text("This only removes the box from this app. Nothing is deleted on the server.")
         }
     }
 
@@ -104,10 +104,10 @@ struct BoxSidebar: View {
         }
         .padding(.vertical, 2)
         .contextMenu {
-            Button("Umbenennen") { beginRename(box) }
-            Button("Bearbeiten…") { editor = .existing(box) }
+            Button("Rename") { beginRename(box) }
+            Button("Edit…") { editor = .existing(box) }
             Divider()
-            Button("Entfernen…", role: .destructive) { boxPendingRemoval = box }
+            Button("Remove…", role: .destructive) { boxPendingRemoval = box }
         }
     }
 

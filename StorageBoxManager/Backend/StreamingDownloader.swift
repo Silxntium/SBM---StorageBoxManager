@@ -34,7 +34,7 @@ final class StreamingDownloader: NSObject, URLSessionDataDelegate, @unchecked Se
         let fileManager = FileManager.default
         try? fileManager.removeItem(at: destination)
         guard fileManager.createFile(atPath: destination.path(percentEncoded: false), contents: nil) else {
-            throw BackendError.transport("Zieldatei „\(destination.lastPathComponent)“ konnte nicht angelegt werden")
+            throw BackendError.transport("couldn't create destination file \"\(destination.lastPathComponent)\"")
         }
         do {
             let handle = try FileHandle(forWritingTo: destination)

@@ -31,7 +31,7 @@ struct NameEntrySheet: View { // shared by "new folder" and "rename", just a nam
 
             HStack {
                 Spacer()
-                Button("Abbrechen", role: .cancel) { dismiss() }
+                Button("Cancel", role: .cancel) { dismiss() }
                 Button(confirmLabel, action: confirm)
                     .keyboardShortcut(.defaultAction)
                     .disabled(!isValid)

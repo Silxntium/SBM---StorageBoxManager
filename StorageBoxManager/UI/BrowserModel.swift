@@ -142,9 +142,9 @@ final class BrowserModel {
 
     func createFolder(named rawName: String) {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let backend, validate(name: name, action: "Ordner anlegen") else { return }
+        guard let backend, validate(name: name, action: "New Folder") else { return }
 
-        perform(title: "Ordner konnte nicht angelegt werden") {
+        perform(title: "Couldn't Create Folder") {
             try await backend.createDirectory(at: self.path.appending(name))
         }
     }
@@ -152,9 +152,9 @@ final class BrowserModel {
     func rename(_ item: RemoteItem, to rawName: String) {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard name != item.name else { return }
-        guard let backend, validate(name: name, action: "Umbenennen") else { return }
+        guard let backend, validate(name: name, action: "Rename") else { return }
 
-        perform(title: "Umbenennen fehlgeschlagen") {
+        perform(title: "Rename Failed") {
             try await backend.move(
                 from: item.path,
                 to: item.path.renamed(to: name),
@@ -166,7 +166,7 @@ final class BrowserModel {
     func delete(_ targets: [RemoteItem]) {
         guard let backend, !targets.isEmpty else { return }
 
-        perform(title: "Löschen fehlgeschlagen") {
+        perform(title: "Delete Failed") {
             // one at a time on purpose - box chokes if you fire off a bunch of DELETEs at once
             for target in targets {
                 try await backend.delete(target.path, isDirectory: target.isDirectory)
@@ -203,8 +203,8 @@ final class BrowserModel {
 
         if !skippedFolders.isEmpty {
             alert = AlertMessage(
-                title: "Ordner übersprungen",
-                message: "\(skippedFolders.joined(separator: ", ")) — in dieser Version lassen sich nur einzelne Dateien hochladen."
+                title: "Folders Skipped",
+                message: "\(skippedFolders.joined(separator: ", ")) — this version can only upload individual files."
             )
         }
     }
@@ -227,8 +227,8 @@ final class BrowserModel {
 
         if files.count != targets.count {
             alert = AlertMessage(
-                title: "Ordner übersprungen",
-                message: "In dieser Version lassen sich nur einzelne Dateien herunterladen, keine ganzen Ordner."
+                title: "Folders Skipped",
+                message: "This version can only download individual files, not whole folders."
             )
         }
     }
@@ -262,15 +262,15 @@ final class BrowserModel {
 
     private func validate(name: String, action: String) -> Bool {
         guard !name.isEmpty else {
-            alert = AlertMessage(title: action, message: "Der Name darf nicht leer sein.")
+            alert = AlertMessage(title: action, message: "The name can't be empty.")
             return false
         }
         guard !name.contains("/") else {
-            alert = AlertMessage(title: action, message: "Der Name darf keinen Schrägstrich enthalten.")
+            alert = AlertMessage(title: action, message: "The name can't contain a slash.")
             return false
         }
         guard name != "." && name != ".." else {
-            alert = AlertMessage(title: action, message: "„\(name)“ ist als Name nicht erlaubt.")
+            alert = AlertMessage(title: action, message: "\"\(name)\" isn't allowed as a name.")
             return false
         }
         return true
@@ -282,7 +282,7 @@ final class BrowserModel {
 
     static func describe(_ error: any Error) -> String {
         guard let backendError = error as? BackendError else { return error.localizedDescription }
-        let description = backendError.errorDescription ?? "Unbekannter Fehler"
+        let description = backendError.errorDescription ?? "Unknown error"
         guard let suggestion = backendError.recoverySuggestion else { return description }
         return "\(description) \(suggestion)"
     }

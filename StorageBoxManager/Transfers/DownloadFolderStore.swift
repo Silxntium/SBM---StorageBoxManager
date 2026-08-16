@@ -40,9 +40,9 @@ enum DownloadFolderStore {
     @MainActor
     static func promptForFolder() -> URL? {
         let panel = NSOpenPanel()
-        panel.title = String(localized: "Zielordner für Downloads")
-        panel.message = String(localized: "Wähle den Ordner, in den heruntergeladene Dateien gelegt werden.")
-        panel.prompt = String(localized: "Auswählen")
+        panel.title = String(localized: "Download Folder")
+        panel.message = String(localized: "Choose the folder downloaded files should go into.")
+        panel.prompt = String(localized: "Choose")
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
@@ -57,8 +57,8 @@ enum DownloadFolderStore {
     @MainActor
     static func promptForUploadFiles() -> [URL] {
         let panel = NSOpenPanel()
-        panel.title = String(localized: "Dateien hochladen")
-        panel.prompt = String(localized: "Hochladen")
+        panel.title = String(localized: "Upload Files")
+        panel.prompt = String(localized: "Upload")
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true

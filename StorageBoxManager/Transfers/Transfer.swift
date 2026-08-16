@@ -49,15 +49,15 @@ final class Transfer: Identifiable {
     var progressDescription: String {
         switch state {
         case .waiting:
-            String(localized: "Wartet")
+            String(localized: "Waiting")
         case .running where bytesTotal > 0:
-            "\(bytesDone.formatted(.byteCount(style: .file))) von \(bytesTotal.formatted(.byteCount(style: .file)))"
+            "\(bytesDone.formatted(.byteCount(style: .file))) of \(bytesTotal.formatted(.byteCount(style: .file)))"
         case .running:
             bytesDone.formatted(.byteCount(style: .file))
         case .finished:
-            String(localized: "Abgeschlossen")
+            String(localized: "Done")
         case .cancelled:
-            String(localized: "Abgebrochen")
+            String(localized: "Cancelled")
         case .failed(let message):
             message
         }

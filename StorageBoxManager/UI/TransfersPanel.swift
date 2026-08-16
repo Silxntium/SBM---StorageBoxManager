@@ -40,8 +40,8 @@ struct TransfersPanel: View {
             .buttonStyle(.plain)
 
             Text(queue.activeCount > 0
-                 ? "\(queue.activeCount) Übertragung\(queue.activeCount == 1 ? "" : "en") aktiv"
-                 : "Übertragungen")
+                 ? "\(queue.activeCount) transfer\(queue.activeCount == 1 ? "" : "s") active"
+                 : "Transfers")
                 .font(.callout.weight(.medium))
 
             if queue.activeCount > 0 {
@@ -51,11 +51,11 @@ struct TransfersPanel: View {
             Spacer()
 
             if queue.activeCount > 0 {
-                Button("Alle abbrechen") { queue.cancelAll() }
+                Button("Cancel All") { queue.cancelAll() }
                     .buttonStyle(.accessoryBar)
             }
             if queue.hasFinishedEntries {
-                Button("Liste leeren") { queue.clearFinished() }
+                Button("Clear List") { queue.clearFinished() }
                     .buttonStyle(.accessoryBar)
             }
         }
@@ -108,7 +108,7 @@ private struct TransferRow: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help("Abbrechen")
+                .help("Cancel")
             }
         }
         .padding(.horizontal, 12)

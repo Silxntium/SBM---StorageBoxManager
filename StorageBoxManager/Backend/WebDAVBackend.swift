@@ -47,7 +47,7 @@ struct WebDAVBackend: StorageBackend {
         isDirectory: Bool
     ) throws -> URLRequest {
         guard let url = path.url(relativeTo: baseURL, isDirectory: isDirectory) else {
-            throw BackendError.malformedResponse("Pfad „\(path.displayPath)“ ergibt keine gültige URL")
+            throw BackendError.malformedResponse("path \"\(path.displayPath)\" doesn't form a valid URL")
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
@@ -140,7 +140,7 @@ struct WebDAVBackend: StorageBackend {
 
     func move(from source: RemotePath, to destination: RemotePath, isDirectory: Bool) async throws {
         guard let destinationURL = destination.url(relativeTo: baseURL, isDirectory: isDirectory) else {
-            throw BackendError.malformedResponse("Zielpfad ergibt keine gültige URL")
+            throw BackendError.malformedResponse("destination path doesn't form a valid URL")
         }
         var request = try makeRequest("MOVE", path: source, isDirectory: isDirectory)
         request.setValue(destinationURL.absoluteString, forHTTPHeaderField: "Destination")

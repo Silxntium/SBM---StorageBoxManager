@@ -33,11 +33,11 @@ struct RemoteItem: Identifiable, Hashable, Sendable {
         return "doc"
     }
 
-    var kindDescription: String { // shown in the "Art" column
-        if isDirectory { return String(localized: "Ordner") }
+    var kindDescription: String { // shown in the "Kind" column
+        if isDirectory { return String(localized: "Folder") }
         if let description = utType?.localizedDescription { return description }
         let ext = (name as NSString).pathExtension
-        return ext.isEmpty ? String(localized: "Dokument") : ext.uppercased()
+        return ext.isEmpty ? String(localized: "Document") : ext.uppercased()
     }
 
     // KeyPathComparator wants non-optional Comparable, Optional doesn't conform, hence these

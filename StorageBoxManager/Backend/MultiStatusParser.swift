@@ -22,11 +22,11 @@ enum MultiStatusParser {
         parser.delegate = delegate
 
         guard parser.parse() else {
-            let reason = parser.parserError?.localizedDescription ?? "ungültiges XML"
+            let reason = parser.parserError?.localizedDescription ?? "invalid XML"
             throw BackendError.malformedResponse(reason)
         }
         guard !delegate.entries.isEmpty else {
-            throw BackendError.malformedResponse("keine <response>-Elemente")
+            throw BackendError.malformedResponse("no <response> elements")
         }
         return delegate.entries
     }

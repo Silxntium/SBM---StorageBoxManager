@@ -12,7 +12,7 @@ enum KeychainStore {
             case .unexpectedStatus(let status):
                 let message = SecCopyErrorMessageString(status, nil) as String?
                 return String(
-                    localized: "Schlüsselbund-Fehler: \(message ?? "Status \(status)")"
+                    localized: "Keychain error: \(message ?? "status \(status)")"
                 )
             }
         }

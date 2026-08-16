@@ -52,39 +52,39 @@ struct FileBrowser: View {
         .toolbar { toolbar(browser) }
         .sheet(isPresented: $showingNewFolder) {
             NameEntrySheet(
-                title: "Neuer Ordner",
-                prompt: "Name des Ordners",
+                title: "New Folder",
+                prompt: "Folder name",
                 initialText: "",
-                confirmLabel: "Anlegen"
+                confirmLabel: "Create"
             ) { browser.createFolder(named: $0) }
         }
         .sheet(item: $renameTarget) { item in
             NameEntrySheet(
-                title: "„\(item.name)“ umbenennen",
-                prompt: "Neuer Name",
+                title: "Rename \"\(item.name)\"",
+                prompt: "New name",
                 initialText: item.name,
-                confirmLabel: "Umbenennen"
+                confirmLabel: "Rename"
             ) { browser.rename(item, to: $0) }
         }
         .confirmationDialog(
             deleteTargets.count == 1
-                ? "„\(deleteTargets[0].name)“ löschen?"
-                : "\(deleteTargets.count) Objekte löschen?",
+                ? "Delete \"\(deleteTargets[0].name)\"?"
+                : "Delete \(deleteTargets.count) items?",
             isPresented: Binding(
                 get: { !deleteTargets.isEmpty },
                 set: { if !$0 { deleteTargets = [] } }
             ),
             titleVisibility: .visible
         ) {
-            Button("Löschen", role: .destructive) {
+            Button("Delete", role: .destructive) {
                 browser.delete(deleteTargets)
                 deleteTargets = []
             }
-            Button("Abbrechen", role: .cancel) { deleteTargets = [] }
+            Button("Cancel", role: .cancel) { deleteTargets = [] }
         } message: {
             Text(deleteTargets.contains(where: \.isDirectory)
-                 ? "Ordner werden mit ihrem gesamten Inhalt gelöscht. Das lässt sich nicht rückgängig machen."
-                 : "Das lässt sich nicht rückgängig machen.")
+                 ? "Folders are deleted along with everything inside them. This can't be undone."
+                 : "This can't be undone.")
         }
         .alert(item: $browser.alert) { alert in
             Alert(title: Text(alert.title), message: Text(alert.message), dismissButton: .default(Text("OK")))
@@ -105,22 +105,22 @@ struct FileBrowser: View {
 
         case .failed(let message):
             ContentUnavailableView {
-                Label("Ordner konnte nicht geladen werden", systemImage: "exclamationmark.triangle")
+                Label("Couldn't Load Folder", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {
-                Button("Erneut versuchen") { browser.refresh() }
+                Button("Try Again") { browser.refresh() }
             }
 
         default:
             if browser.sortedItems.isEmpty {
                 ContentUnavailableView(
-                    browser.hiddenItemCount > 0 ? "Nichts Sichtbares hier" : "Dieser Ordner ist leer",
+                    browser.hiddenItemCount > 0 ? "Nothing Visible Here" : "This Folder Is Empty",
                     systemImage: "folder",
                     description: Text(
                         browser.hiddenItemCount > 0
-                            ? "\(browser.hiddenItemCount) versteckte Objekte. Mit ⌘⇧. einblenden."
-                            : "Zieh Dateien hierher, um sie hochzuladen."
+                            ? "\(browser.hiddenItemCount) hidden items. Show them with ⌘⇧."
+                            : "Drag files here to upload them."
                     )
                 )
             } else {
@@ -132,7 +132,7 @@ struct FileBrowser: View {
     private func loadingView(_ browser: BrowserModel) -> some View {
         VStack(spacing: 10) {
             ProgressView()
-            Text("Lade \(browser.path.displayPath)…")
+            Text("Loading \(browser.path.displayPath)…")
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -153,20 +153,20 @@ struct FileBrowser: View {
             }
             .width(min: 200, ideal: 340)
 
-            TableColumn("Größe", value: \.sortSize) { item in
+            TableColumn("Size", value: \.sortSize) { item in
                 Text(item.formattedSize)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
             .width(min: 80, ideal: 100)
 
-            TableColumn("Geändert", value: \.sortDate) { item in
+            TableColumn("Modified", value: \.sortDate) { item in
                 Text(item.formattedModified)
                     .foregroundStyle(.secondary)
             }
             .width(min: 130, ideal: 170)
 
-            TableColumn("Art", value: \.kindDescription) { item in
+            TableColumn("Kind", value: \.kindDescription) { item in
                 Text(item.kindDescription)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -189,21 +189,21 @@ struct FileBrowser: View {
 
         if targets.count == 1, let item = targets.first {
             if item.isDirectory {
-                Button("Öffnen") { browser.open(item) }
+                Button("Open") { browser.open(item) }
             }
-            Button("Umbenennen…") { renameTarget = item }
+            Button("Rename…") { renameTarget = item }
             Divider()
         }
         if targets.contains(where: { !$0.isDirectory }) {
-            Button("Herunterladen") { download(browser, targets) }
+            Button("Download") { download(browser, targets) }
         }
         if !targets.isEmpty {
-            Button("Löschen…", role: .destructive) { deleteTargets = targets }
+            Button("Delete…", role: .destructive) { deleteTargets = targets }
             Divider()
         }
-        Button("Neuer Ordner…") { showingNewFolder = true }
-        Button("Dateien hochladen…") { upload(browser) }
-        Button("Aktualisieren") { browser.refresh() }
+        Button("New Folder…") { showingNewFolder = true }
+        Button("Upload Files…") { upload(browser) }
+        Button("Refresh") { browser.refresh() }
     }
 
     private func upload(_ browser: BrowserModel) {
@@ -223,7 +223,7 @@ struct FileBrowser: View {
             Button {
                 browser.goUp()
             } label: {
-                Label("Übergeordneter Ordner", systemImage: "chevron.up")
+                Label("Parent Folder", systemImage: "chevron.up")
             }
             .disabled(!browser.canGoUp)
             .keyboardShortcut(.upArrow, modifiers: .command)
@@ -233,26 +233,26 @@ struct FileBrowser: View {
             Button {
                 showingNewFolder = true
             } label: {
-                Label("Neuer Ordner", systemImage: "folder.badge.plus")
+                Label("New Folder", systemImage: "folder.badge.plus")
             }
 
             Button {
                 upload(browser)
             } label: {
-                Label("Hochladen", systemImage: "arrow.up.doc")
+                Label("Upload", systemImage: "arrow.up.doc")
             }
 
             Button {
                 download(browser, browser.selectedItems)
             } label: {
-                Label("Herunterladen", systemImage: "arrow.down.doc")
+                Label("Download", systemImage: "arrow.down.doc")
             }
             .disabled(!browser.selectedItems.contains { !$0.isDirectory })
 
             Button {
                 deleteTargets = browser.selectedItems
             } label: {
-                Label("Löschen", systemImage: "trash")
+                Label("Delete", systemImage: "trash")
             }
             .disabled(browser.selection.isEmpty)
 
@@ -260,19 +260,19 @@ struct FileBrowser: View {
                 browser.showsHiddenFiles.toggle()
             } label: {
                 Label(
-                    browser.showsHiddenFiles ? "Versteckte Dateien ausblenden" : "Versteckte Dateien einblenden",
+                    browser.showsHiddenFiles ? "Hide Hidden Files" : "Show Hidden Files",
                     systemImage: browser.showsHiddenFiles ? "eye" : "eye.slash"
                 )
             }
             .keyboardShortcut(".", modifiers: [.command, .shift])
             .help(browser.showsHiddenFiles
-                  ? "Versteckte Dateien ausblenden (⌘⇧.)"
-                  : "\(browser.hiddenItemCount) versteckte Objekte einblenden (⌘⇧.)")
+                  ? "Hide hidden files (⌘⇧.)"
+                  : "Show \(browser.hiddenItemCount) hidden items (⌘⇧.)")
 
             Button {
                 browser.refresh()
             } label: {
-                Label("Aktualisieren", systemImage: "arrow.clockwise")
+                Label("Refresh", systemImage: "arrow.clockwise")
             }
             .keyboardShortcut("r", modifiers: .command)
         }
@@ -294,7 +294,7 @@ private struct BreadcrumbBar: View {
                     Button {
                         onSelect(crumb)
                     } label: {
-                        Text(crumb.isRoot ? "Wurzel" : crumb.name)
+                        Text(crumb.isRoot ? "Root" : crumb.name)
                             .fontWeight(crumb == path ? .semibold : .regular)
                     }
                     .buttonStyle(.accessoryBar)
