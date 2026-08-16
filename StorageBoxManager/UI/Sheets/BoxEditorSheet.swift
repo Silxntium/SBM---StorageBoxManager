@@ -1,0 +1,229 @@
+import SwiftUI
+
+/// Add or edit a box. The connection test runs the same `probe()` the browser depends on, so
+/// a green result here means the file list will work too.
+struct BoxEditorSheet: View {
+    let box: StorageBox?
+
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var displayName = ""
+    @State private var host = ""
+    @State private var username = ""
+    @State private var password = ""
+    @State private var tint: BoxTint = .blue
+    @State private var symbolName = "externaldrive.fill"
+    @State private var test: TestState = .idle
+    @State private var saveError: String?
+
+    private enum TestState: Equatable {
+        case idle
+        case running
+        case succeeded
+        case failed(String)
+    }
+
+    private var isEditing: Bool { box != nil }
+
+    private var canSave: Bool {
+        !host.isEmpty && !username.isEmpty && (isEditing || !password.isEmpty)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Form {
+                Section {
+                    TextField("Name", text: $displayName, prompt: Text("z. B. Fotos"))
+                    LabeledContent("Darstellung") {
+                        HStack(spacing: 12) {
+                            symbolPicker
+                            tintPicker
+                        }
+                    }
+                } header: {
+                    Text("Anzeige")
+                } footer: {
+                    Text("Dieser Name gilt nur in dieser App — der Server behält seinen Hostnamen.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Verbindung") {
+                    TextField("Server", text: $host, prompt: Text("u650699.your-storagebox.de"))
+                        .onChange(of: host) { _, new in
+                            let normalized = AppModel.normalizeHost(new)
+                            if normalized != new { host = normalized }
+                            if username.isEmpty {
+                                username = AppModel.suggestedUsername(forHost: normalized)
+                            }
+                        }
+                    TextField("Benutzername", text: $username, prompt: Text("u650699"))
+                    SecureField(
+                        "Passwort",
+                        text: $password,
+                        prompt: Text(isEditing ? "unverändert lassen" : "Passwort")
+                    )
+                }
+            }
+            .formStyle(.grouped)
+
+            Divider()
+
+            HStack(spacing: 12) {
+                testStatusView
+                Spacer()
+                Button("Abbrechen", role: .cancel) { dismiss() }
+                Button("Verbindung testen") { runTest() }
+                    .disabled(!canSave || test == .running)
+                Button(isEditing ? "Sichern" : "Hinzufügen") { save() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canSave)
+            }
+            .padding(16)
+        }
+        .frame(width: 520)
+        .onAppear(perform: loadExisting)
+        .alert("Sichern fehlgeschlagen", isPresented: .constant(saveError != nil)) {
+            Button("OK") { saveError = nil }
+        } message: {
+            Text(saveError ?? "")
+        }
+    }
+
+    // MARK: - Pieces
+
+    private var symbolPicker: some View {
+        Picker("Symbol", selection: $symbolName) {
+            ForEach(StorageBox.symbolChoices, id: \.self) { name in
+                Image(systemName: name).tag(name)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(width: 70)
+    }
+
+    private var tintPicker: some View {
+        HStack(spacing: 6) {
+            ForEach(BoxTint.allCases) { option in
+                Circle()
+                    .fill(option.color)
+                    .frame(width: 16, height: 16)
+                    .overlay {
+                        Circle()
+                            .strokeBorder(.primary, lineWidth: tint == option ? 2 : 0)
+                    }
+                    .onTapGesture { tint = option }
+                    .help(option.label)
+                    .accessibilityLabel(option.label)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var testStatusView: some View {
+        switch test {
+        case .idle:
+            EmptyView()
+        case .running:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Teste…").foregroundStyle(.secondary)
+            }
+        case .succeeded:
+            Label("Verbindung steht", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .lineLimit(2)
+                .help(message)
+        }
+    }
+
+    // MARK: - Actions
+
+    private func loadExisting() {
+        guard let box else { return }
+        displayName = box.displayName
+        host = box.host
+        username = box.username
+        tint = box.tint
+        symbolName = box.symbolName
+    }
+
+    /// Resolves the password to probe with: the freshly typed one, or the stored one when
+    /// editing without touching the password field.
+    private func effectivePassword() throws -> String {
+        if !password.isEmpty { return password }
+        guard let box else { return "" }
+        return try KeychainStore.password(host: box.host, account: box.username) ?? ""
+    }
+
+    private func runTest() {
+        test = .running
+        let candidate = StorageBox(
+            id: box?.id ?? UUID(),
+            displayName: displayName,
+            host: host,
+            username: username,
+            tint: tint,
+            symbolName: symbolName
+        )
+        Task {
+            do {
+                let backend = try WebDAVBackend(box: candidate, password: try effectivePassword())
+                try await backend.probe()
+                test = .succeeded
+            } catch {
+                test = .failed(Self.message(for: error))
+            }
+        }
+    }
+
+    private func save() {
+        let updated = StorageBox(
+            id: box?.id ?? UUID(),
+            displayName: displayName,
+            host: host,
+            username: username,
+            tint: tint,
+            symbolName: symbolName
+        )
+        do {
+            if !password.isEmpty {
+                try KeychainStore.setPassword(password, host: host, account: username)
+            }
+            // Editing may have changed host or username, which are part of the keychain key —
+            // the entry under the old key would otherwise linger.
+            if let box, box.host != host || box.username != username {
+                try? KeychainStore.deletePassword(host: box.host, account: box.username)
+                if password.isEmpty {
+                    let carried = try KeychainStore.password(host: box.host, account: box.username) ?? ""
+                    if !carried.isEmpty {
+                        try KeychainStore.setPassword(carried, host: host, account: username)
+                    }
+                }
+            }
+
+            if box == nil {
+                model.store.add(updated)
+                model.selectedBoxID = updated.id
+            } else {
+                model.store.update(updated)
+            }
+            dismiss()
+        } catch {
+            saveError = Self.message(for: error)
+        }
+    }
+
+    private static func message(for error: any Error) -> String {
+        if let backendError = error as? BackendError {
+            let suggestion = backendError.recoverySuggestion.map { " \($0)" } ?? ""
+            return (backendError.errorDescription ?? "Unbekannter Fehler") + suggestion
+        }
+        return error.localizedDescription
+    }
+}
