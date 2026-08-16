@@ -6,7 +6,7 @@ und ihre Dateien über eine eigene Oberfläche zu durchsuchen, hoch- und herunte
 ## Warum
 
 Hetzner Storage Boxen werden im Finder standardmäßig mit ihrem Server-Hostnamen angezeigt
-(z. B. `u650699.your-storagebox.de`), was sich dort nicht ändern lässt. Diese App verbindet
+(z. B. `u123456.your-storagebox.de`), was sich dort nicht ändern lässt. Diese App verbindet
 sich per WebDAV direkt mit den Boxen und lässt jeder einen eigenen Namen geben.
 
 ## Installation

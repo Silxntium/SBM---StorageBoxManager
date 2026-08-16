@@ -40,7 +40,7 @@ final class AppModel {
         return value
     }
 
-    // hetzner username is just the first bit of the hostname (u650699.your-storagebox.de -> u650699)
+    // hetzner username is just the first bit of the hostname (u123456.your-storagebox.de -> u123456)
     static func suggestedUsername(forHost host: String) -> String {
         String(host.split(separator: ".").first ?? "")
     }

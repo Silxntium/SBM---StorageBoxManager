@@ -45,7 +45,7 @@ enum BackendError: LocalizedError, Equatable {
         case .authenticationFailed:
             String(localized: "Benutzername und Passwort in den Box-Einstellungen prüfen.")
         case .invalidHost:
-            String(localized: "Erwartet wird ein Hostname wie „u650699.your-storagebox.de“.")
+            String(localized: "Erwartet wird ein Hostname wie „u123456.your-storagebox.de“.")
         case .missingPassword:
             String(localized: "Die Box bearbeiten und das Passwort erneut eingeben.")
         case .alreadyExists:

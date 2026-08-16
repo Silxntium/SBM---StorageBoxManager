@@ -48,7 +48,7 @@ struct BoxEditorSheet: View {
                 }
 
                 Section("Verbindung") {
-                    TextField("Server", text: $host, prompt: Text("u650699.your-storagebox.de"))
+                    TextField("Server", text: $host, prompt: Text("u123456.your-storagebox.de"))
                         .onChange(of: host) { _, new in
                             let normalized = AppModel.normalizeHost(new)
                             if normalized != new { host = normalized }
@@ -56,7 +56,7 @@ struct BoxEditorSheet: View {
                                 username = AppModel.suggestedUsername(forHost: normalized)
                             }
                         }
-                    TextField("Benutzername", text: $username, prompt: Text("u650699"))
+                    TextField("Benutzername", text: $username, prompt: Text("u123456"))
                     SecureField(
                         "Passwort",
                         text: $password,
