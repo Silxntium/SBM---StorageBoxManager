@@ -1,11 +1,8 @@
 import Foundation
 import Security
 
-/// Passwords for the configured boxes.
-///
-/// These are *this app's* keychain items. The entries the Finder created when the volumes were
-/// mounted live in the login keychain and belong to another application, and the sandbox keeps
-/// them out of reach — so each box's password is entered once here and stored separately.
+// our own keychain items, separate from whatever the Finder stored when the volumes got mounted
+// (that's a different app's entry and the sandbox can't see it anyway)
 enum KeychainStore {
     enum KeychainError: LocalizedError {
         case unexpectedStatus(OSStatus)
@@ -48,8 +45,7 @@ enum KeychainStore {
         }
     }
 
-    /// Upsert — `SecItemAdd` reports `errSecDuplicateItem` rather than replacing, so an
-    /// existing entry is updated in place.
+    // SecItemAdd errors out with duplicate instead of just overwriting, so fall back to update
     static func setPassword(_ password: String, host: String, account: String) throws {
         let data = Data(password.utf8)
         let query = query(host: host, account: account)

@@ -1,8 +1,6 @@
 import Foundation
 import Observation
 
-/// Root state: the configured boxes, which one is selected, and the factory that turns a box
-/// plus its stored password into a live backend.
 @MainActor
 @Observable
 final class AppModel {
@@ -24,14 +22,12 @@ final class AppModel {
         return try WebDAVBackend(box: box, password: password)
     }
 
-    /// The download folder, asking for one the first time it is needed. Returns nil if the
-    /// user cancelled the panel.
+    // asks for a download folder the first time, nil if the panel got cancelled
     func resolveDownloadFolder() -> URL? {
         DownloadFolderStore.resolve() ?? DownloadFolderStore.promptForFolder()
     }
 
-    /// Normalises whatever was pasted into the host field — a full WebDAV URL copied out of
-    /// the Finder's "Connect to Server" sheet is the most likely input.
+    // people paste the full "Connect to Server" URL from Finder here more often than not
     static func normalizeHost(_ raw: String) -> String {
         var value = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         for scheme in ["https://", "http://", "webdav://", "webdavs://", "smb://", "sftp://"]
@@ -44,8 +40,7 @@ final class AppModel {
         return value
     }
 
-    /// A Hetzner storage box's username is the hostname's first label (`u650699`), so the
-    /// username field can fill itself in.
+    // hetzner username is just the first bit of the hostname (u650699.your-storagebox.de -> u650699)
     static func suggestedUsername(forHost host: String) -> String {
         String(host.split(separator: ".").first ?? "")
     }

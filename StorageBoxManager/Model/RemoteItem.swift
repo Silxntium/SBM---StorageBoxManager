@@ -1,7 +1,6 @@
 import Foundation
 import UniformTypeIdentifiers
 
-/// One file or folder as reported by the backend.
 struct RemoteItem: Identifiable, Hashable, Sendable {
     var path: RemotePath
     var isDirectory: Bool
@@ -34,16 +33,14 @@ struct RemoteItem: Identifiable, Hashable, Sendable {
         return "doc"
     }
 
-    /// Localized type name for the "Art" column.
-    var kindDescription: String {
+    var kindDescription: String { // shown in the "Art" column
         if isDirectory { return String(localized: "Ordner") }
         if let description = utType?.localizedDescription { return description }
         let ext = (name as NSString).pathExtension
         return ext.isEmpty ? String(localized: "Dokument") : ext.uppercased()
     }
 
-    // `KeyPathComparator` needs a non-optional `Comparable`, and the standard library does not
-    // make `Optional` comparable — so the table sorts on these normalised values instead.
+    // KeyPathComparator wants non-optional Comparable, Optional doesn't conform, hence these
     var sortSize: Int64 { size ?? -1 }
     var sortDate: Date { modified ?? .distantPast }
 

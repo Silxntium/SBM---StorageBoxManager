@@ -1,25 +1,14 @@
 import Foundation
 
-/// Everything the UI needs from a storage box, independent of how it is reached.
-///
-/// This is the seam where an SFTP implementation (Hetzner speaks SSH on port 23) can be added
-/// later without the UI knowing: nothing above this protocol mentions HTTP.
+// keeping this abstract so an SFTP backend could slot in later without touching the UI at all
 protocol StorageBackend: Sendable {
-    /// Cheap round-trip that proves host and credentials work. Used by the box editor.
-    func probe() async throws
-
-    /// Direct children of a directory, not recursive.
-    func list(_ path: RemotePath) async throws -> [RemoteItem]
-
+    func probe() async throws // used by the box editor's "test connection" button
+    func list(_ path: RemotePath) async throws -> [RemoteItem] // one level, not recursive
     func createDirectory(at path: RemotePath) async throws
-
-    /// Covers both renaming and moving. Fails rather than overwriting an existing target.
-    func move(from source: RemotePath, to destination: RemotePath, isDirectory: Bool) async throws
-
+    func move(from source: RemotePath, to destination: RemotePath, isDirectory: Bool) async throws // rename = move too
     func delete(_ path: RemotePath, isDirectory: Bool) async throws
 
-    /// Streams a remote file to `localURL`, reporting `(bytesDone, bytesTotal)`.
-    /// `bytesTotal` is `-1` while the total is still unknown.
+    // bytesTotal is -1 until we know it
     func download(
         _ path: RemotePath,
         to localURL: URL,

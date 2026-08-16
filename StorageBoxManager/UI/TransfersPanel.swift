@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Collapsible strip at the bottom of the window showing what is currently moving.
 struct TransfersPanel: View {
     @Environment(AppModel.self) private var model
     @State private var isExpanded = true

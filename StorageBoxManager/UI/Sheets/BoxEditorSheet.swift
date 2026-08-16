@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Add or edit a box. The connection test runs the same `probe()` the browser depends on, so
-/// a green result here means the file list will work too.
 struct BoxEditorSheet: View {
     let box: StorageBox?
 
@@ -153,8 +151,7 @@ struct BoxEditorSheet: View {
         symbolName = box.symbolName
     }
 
-    /// Resolves the password to probe with: the freshly typed one, or the stored one when
-    /// editing without touching the password field.
+    // freshly typed password, or fall back to whatever's stored if editing w/o touching the field
     private func effectivePassword() throws -> String {
         if !password.isEmpty { return password }
         guard let box else { return "" }
@@ -195,8 +192,7 @@ struct BoxEditorSheet: View {
             if !password.isEmpty {
                 try KeychainStore.setPassword(password, host: host, account: username)
             }
-            // Editing may have changed host or username, which are part of the keychain key —
-            // the entry under the old key would otherwise linger.
+            // host/username changed -> that's part of the keychain key, so move the entry over
             if let box, box.host != host || box.username != username {
                 try? KeychainStore.deletePassword(host: box.host, account: box.username)
                 if password.isEmpty {

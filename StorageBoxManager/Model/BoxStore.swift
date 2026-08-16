@@ -2,8 +2,7 @@ import Foundation
 import Observation
 import OSLog
 
-/// Persists the configured boxes as JSON in the app's Application Support directory.
-/// Passwords never touch this file — only the username, which keys the keychain lookup.
+// boxes.json in Application Support - no passwords in here, just enough to look them up in Keychain
 @MainActor
 @Observable
 final class BoxStore {
@@ -37,7 +36,6 @@ final class BoxStore {
         save()
     }
 
-    /// The core feature: give a box whatever name makes it recognisable.
     func rename(_ box: StorageBox, to newName: String) {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let index = boxes.firstIndex(where: { $0.id == box.id }) else { return }
@@ -45,8 +43,7 @@ final class BoxStore {
         save()
     }
 
-    /// Removes the box and its stored password. The remote data is untouched.
-    func remove(_ box: StorageBox) {
+    func remove(_ box: StorageBox) { // doesn't touch anything on the actual server, just forgets it locally
         boxes.removeAll { $0.id == box.id }
         try? KeychainStore.deletePassword(host: box.host, account: box.username)
         save()

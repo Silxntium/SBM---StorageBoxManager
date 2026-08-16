@@ -1,10 +1,8 @@
 import AppKit
 import Foundation
 
-/// Remembers the folder downloads go to.
-///
-/// Inside the sandbox a plain path is worthless after a relaunch: only a security-scoped
-/// bookmark carries the permission the open panel granted, so that is what gets stored.
+// a plain path string is useless after relaunch in the sandbox - need the security-scoped
+// bookmark to actually keep write access
 enum DownloadFolderStore {
     private static let defaultsKey = "downloadFolderBookmark"
 
@@ -17,7 +15,6 @@ enum DownloadFolderStore {
         UserDefaults.standard.set(bookmark, forKey: defaultsKey)
     }
 
-    /// Resolves the stored folder, refreshing the bookmark if the system reports it as stale.
     static func resolve() -> URL? {
         guard let bookmark = UserDefaults.standard.data(forKey: defaultsKey) else { return nil }
 
@@ -40,7 +37,6 @@ enum DownloadFolderStore {
         UserDefaults.standard.removeObject(forKey: defaultsKey)
     }
 
-    /// Asks for a download folder. Returns nil if the panel was cancelled.
     @MainActor
     static func promptForFolder() -> URL? {
         let panel = NSOpenPanel()
@@ -58,7 +54,6 @@ enum DownloadFolderStore {
         return url
     }
 
-    /// Files to upload, chosen through the open panel.
     @MainActor
     static func promptForUploadFiles() -> [URL] {
         let panel = NSOpenPanel()
@@ -72,7 +67,7 @@ enum DownloadFolderStore {
         return panel.urls
     }
 
-    /// Avoids clobbering an existing file by appending " 2", " 3", … the way the Finder does.
+    // "file.txt" -> "file 2.txt" -> "file 3.txt" etc, same as Finder does it
     static func uniqueDestination(for name: String, in folder: URL) -> URL {
         let candidate = folder.appendingPathComponent(name)
         guard FileManager.default.fileExists(atPath: candidate.path(percentEncoded: false)) else {

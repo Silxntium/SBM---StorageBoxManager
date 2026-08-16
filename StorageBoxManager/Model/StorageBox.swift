@@ -1,8 +1,6 @@
 import Foundation
 import SwiftUI
 
-/// A configured storage box. The whole point of the app lives here: `displayName` is chosen
-/// by the user and has nothing to do with the server hostname the Finder is stuck showing.
 struct StorageBox: Identifiable, Hashable, Codable, Sendable {
     var id: UUID
     var displayName: String
@@ -27,8 +25,7 @@ struct StorageBox: Identifiable, Hashable, Codable, Sendable {
         self.symbolName = symbolName
     }
 
-    /// Base URL for WebDAV requests. Hetzner storage boxes always serve DAV over HTTPS at the root.
-    var baseURL: URL? {
+    var baseURL: URL? { // hetzner always serves DAV over https at the root
         var components = URLComponents()
         components.scheme = "https"
         components.host = host
@@ -36,8 +33,7 @@ struct StorageBox: Identifiable, Hashable, Codable, Sendable {
         return components.url
     }
 
-    /// Falls back to the hostname so a box is never nameless in the sidebar.
-    var resolvedName: String {
+    var resolvedName: String { // falls back to hostname, never show an empty name in the sidebar
         let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? host : trimmed
     }
@@ -49,8 +45,7 @@ struct StorageBox: Identifiable, Hashable, Codable, Sendable {
     ]
 }
 
-/// A small fixed palette instead of a raw `Color`, so boxes stay `Codable` and legible in
-/// both appearances without storing colour components.
+// fixed palette instead of a raw Color so this stays Codable and works in both light/dark
 enum BoxTint: String, Codable, CaseIterable, Identifiable, Sendable {
     case blue, purple, pink, red, orange, yellow, green, teal, graphite
 

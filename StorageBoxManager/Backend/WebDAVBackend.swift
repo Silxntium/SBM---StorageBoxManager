@@ -1,8 +1,7 @@
 import Foundation
 import OSLog
 
-/// WebDAV over HTTPS, which is what a Hetzner storage box serves (Apache `mod_dav`,
-/// Basic authentication, realm "WebDAV Restricted").
+// talks WebDAV over HTTPS - Apache mod_dav on the storage box side, Basic auth
 struct WebDAVBackend: StorageBackend {
     let baseURL: URL
 
@@ -18,15 +17,13 @@ struct WebDAVBackend: StorageBackend {
         try self.init(baseURL: baseURL, username: box.username, password: password)
     }
 
-    /// Base URL given directly rather than derived from a box — used to point the backend at
-    /// a server other than a Hetzner storage box, which is how it is tested.
+    // separate init so tests can point this at a local Apache instead of a real box
     init(baseURL: URL, username: String, password: String) throws {
         guard !password.isEmpty else { throw BackendError.missingPassword }
         self.baseURL = baseURL
 
-        // Set the Authorization header on every request rather than answering an
-        // authentication challenge. Reacting to the 401 would double every round-trip, and a
-        // sandboxed app has no shared credential storage to fall back on anyway.
+        // just set the header ourselves instead of dealing with URLSession's auth challenge
+        // dance - avoids a wasted 401 roundtrip on literally every request
         let credentials = "\(username):\(password)"
         authorization = "Basic " + Data(credentials.utf8).base64EncodedString()
 
@@ -86,8 +83,7 @@ struct WebDAVBackend: StorageBackend {
         return data
     }
 
-    /// Requests exactly the properties the file list shows. Asking for `<allprop>` instead
-    /// would make Apache emit a much larger body for no extra information.
+    // only ask for what the table actually shows, allprop is way more data than we need
     private static let propfindBody = Data("""
         <?xml version="1.0" encoding="utf-8"?>
         <propfind xmlns="DAV:">
@@ -112,14 +108,13 @@ struct WebDAVBackend: StorageBackend {
     // MARK: - StorageBackend
 
     func probe() async throws {
-        // Depth 0 asks only about the root itself, so the reply stays tiny even on a full box.
-        let request = try propfindRequest(path: .root, depth: "0")
+        let request = try propfindRequest(path: .root, depth: "0") // depth 0 = just check root exists, keep it cheap
         try await send(request, path: .root, accepting: [207, 200])
     }
 
     func list(_ path: RemotePath) async throws -> [RemoteItem] {
-        // Depth 1 rather than infinity: Apache rejects infinite-depth PROPFIND by default
-        // (DavDepthInfinity off), so the tree is walked one level at a time.
+        // NOTE: depth infinity gets rejected by Apache (DavDepthInfinity off by default), so we
+        // walk one level at a time instead. cost us an hour to figure out the first time.
         let request = try propfindRequest(path: path, depth: "1")
         let data = try await send(request, path: path, accepting: [207, 200])
 
@@ -135,9 +130,7 @@ struct WebDAVBackend: StorageBackend {
                     etag: entry.etag
                 )
             }
-            // A Depth-1 PROPFIND always includes the collection itself as the first response.
-            // Without this the folder would appear to contain itself, and recursion would follow.
-            .filter { $0.path != path }
+            .filter { $0.path != path } // propfind includes the folder itself as entry #1, drop it
     }
 
     func createDirectory(at path: RemotePath) async throws {
@@ -150,12 +143,8 @@ struct WebDAVBackend: StorageBackend {
             throw BackendError.malformedResponse("Zielpfad ergibt keine gültige URL")
         }
         var request = try makeRequest("MOVE", path: source, isDirectory: isDirectory)
-        // Destination must be an absolute URL, encoded exactly like the request line — which
-        // is why it comes out of the same RemotePath encoder rather than string interpolation.
         request.setValue(destinationURL.absoluteString, forHTTPHeaderField: "Destination")
-        // Overwrite: F turns "a file of that name is already there" into a 412 instead of
-        // silently destroying it.
-        request.setValue("F", forHTTPHeaderField: "Overwrite")
+        request.setValue("F", forHTTPHeaderField: "Overwrite") // "F" = don't clobber an existing file, fail instead
 
         do {
             try await send(request, path: source, accepting: [201, 204])
@@ -166,8 +155,7 @@ struct WebDAVBackend: StorageBackend {
 
     func delete(_ path: RemotePath, isDirectory: Bool) async throws {
         let request = try makeRequest("DELETE", path: path, isDirectory: isDirectory)
-        // mod_dav removes collections recursively and answers 207 when only part of the tree
-        // could be deleted; that body is inspected below.
+        // 207 = partial delete, some files in the folder couldn't be removed - check the body
         let data = try await send(request, path: path, accepting: [200, 202, 204, 207])
         if let failure = Self.firstFailure(inMultiStatus: data) {
             throw BackendError.from(status: failure.status, path: failure.path)
@@ -200,8 +188,7 @@ struct WebDAVBackend: StorageBackend {
         let data: Data
         let response: URLResponse
         do {
-            // Uploading from a file keeps the body off the heap, so a 20 GB archive costs no
-            // more memory than a 20 KB one.
+            // fromFile: streams instead of loading the whole thing into memory first
             (data, response) = try await session.upload(for: request, fromFile: localURL, delegate: delegate)
         } catch let error as URLError where error.code == .cancelled {
             throw CancellationError()
@@ -220,8 +207,6 @@ struct WebDAVBackend: StorageBackend {
 
     // MARK: - Helpers
 
-    /// Finds the first failing resource in a Multi-Status body, so that a DELETE which only
-    /// removed part of a tree surfaces as an error instead of a silent success.
     private static func firstFailure(inMultiStatus data: Data) -> (path: String, status: Int)? {
         guard !data.isEmpty, let entries = try? MultiStatusParser.parse(data) else { return nil }
         for entry in entries {
@@ -232,8 +217,6 @@ struct WebDAVBackend: StorageBackend {
     }
 }
 
-/// Reports PUT progress. Holds nothing but an immutable closure, so it is safe to hand to
-/// URLSession's delegate queue.
 private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     private let onProgress: @Sendable (Int64, Int64) -> Void
 

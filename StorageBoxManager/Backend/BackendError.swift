@@ -1,6 +1,5 @@
 import Foundation
 
-/// Backend failures phrased for the person looking at the window, not for a log file.
 enum BackendError: LocalizedError, Equatable {
     case invalidHost(String)
     case missingPassword

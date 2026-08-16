@@ -1,8 +1,6 @@
 import Foundation
 import Observation
 
-/// Drives one box's file browser: where we are, what is there, and the operations the toolbar
-/// and context menu invoke.
 @MainActor
 @Observable
 final class BrowserModel {
@@ -15,9 +13,8 @@ final class BrowserModel {
     var sortOrder: [KeyPathComparator<RemoteItem>] = [KeyPathComparator(\.name, order: .forward)]
     var alert: AlertMessage?
 
-    /// Dot-files are hidden like the Finder hides them. On a WebDAV share these are mostly
-    /// macOS's own leftovers — `.DS_Store` and the `._name` AppleDouble sidecars it writes
-    /// because the volume cannot store extended attributes natively.
+    // hide dotfiles like Finder does - mostly .DS_Store / ._ AppleDouble junk macOS creates
+    // because WebDAV can't hold extended attributes
     var showsHiddenFiles: Bool {
         didSet { UserDefaults.standard.set(showsHiddenFiles, forKey: Self.hiddenFilesKey) }
     }
@@ -27,8 +24,7 @@ final class BrowserModel {
     private let backend: (any StorageBackend)?
     private let setupFailure: String?
     private let queue: TransferQueue
-    /// Listings already fetched this session, so going back up a level is instant.
-    private var cache: [RemotePath: [RemoteItem]] = [:]
+    private var cache: [RemotePath: [RemoteItem]] = [:] // per-session, so going back up a level is instant
     private var loadTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
 
@@ -68,8 +64,7 @@ final class BrowserModel {
         items.count - visibleItems.count
     }
 
-    /// Folders first, then the chosen column order — the arrangement a file browser is
-    /// expected to have regardless of which column is sorted.
+    // folders always first regardless of sort column, like every file browser does it
     var sortedItems: [RemoteItem] {
         visibleItems.sorted { lhs, rhs in
             if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
@@ -77,7 +72,6 @@ final class BrowserModel {
         }
     }
 
-    /// Only what is on screen, so an operation can never hit a row the user cannot see.
     var selectedItems: [RemoteItem] {
         visibleItems.filter { selection.contains($0.id) }
     }
@@ -107,7 +101,6 @@ final class BrowserModel {
         reload(force: true)
     }
 
-    /// Loads the current path, serving the cache unless `force` is set.
     func reload(force: Bool) {
         loadTask?.cancel()
 
@@ -174,8 +167,7 @@ final class BrowserModel {
         guard let backend, !targets.isEmpty else { return }
 
         perform(title: "Löschen fehlgeschlagen") {
-            // Sequential rather than concurrent: a storage box handles one DELETE of a large
-            // tree far better than several at once, and the first failure stops the rest.
+            // one at a time on purpose - box chokes if you fire off a bunch of DELETEs at once
             for target in targets {
                 try await backend.delete(target.path, isDirectory: target.isDirectory)
             }
@@ -184,8 +176,7 @@ final class BrowserModel {
 
     // MARK: - Transfers
 
-    /// Queues local files for upload into the current folder. Directories are reported rather
-    /// than silently ignored — WebDAV PUT is per-file, and recursive upload is not in v1.
+    // TODO: recursive folder upload would be nice, PUT is per-file only right now so we just skip dirs
     func upload(_ urls: [URL]) {
         guard let backend else { return }
         let target = path
@@ -218,7 +209,6 @@ final class BrowserModel {
         }
     }
 
-    /// Queues remote files for download into `folder`.
     func download(_ targets: [RemoteItem], to folder: URL) {
         guard let backend else { return }
         let files = targets.filter { !$0.isDirectory }
@@ -243,7 +233,7 @@ final class BrowserModel {
         }
     }
 
-    /// Coalesces the refreshes that a batch of finishing uploads would otherwise each trigger.
+    // debounce - a batch of uploads finishing at once shouldn't trigger a reload each
     private func scheduleRefresh() {
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
@@ -253,11 +243,8 @@ final class BrowserModel {
         }
     }
 
-    /// Backend handle for the drag-out export, which downloads outside the transfer queue.
-    var storageBackend: (any StorageBackend)? { backend }
+    var storageBackend: (any StorageBackend)? { backend } // used by drag-out export, bypasses the queue
 
-    /// Runs a mutation, then refreshes so the list reflects what the server actually has
-    /// rather than what we assumed it would have.
     private func perform(title: String, _ operation: @escaping () async throws -> Void) {
         Task { [weak self] in
             do {
@@ -289,7 +276,6 @@ final class BrowserModel {
         return true
     }
 
-    /// Invalidates a cached listing so the next visit refetches it.
     func invalidateCache(for target: RemotePath) {
         cache.removeValue(forKey: target)
     }

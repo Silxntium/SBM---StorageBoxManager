@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// The list of boxes — and the answer to the original problem: every row shows a name the
-/// user chose, with the hostname demoted to a subtitle.
 struct BoxSidebar: View {
     @Environment(AppModel.self) private var model
 
@@ -89,8 +87,7 @@ struct BoxSidebar: View {
                     .focused($renameFieldFocused)
                     .onSubmit { commitRename(for: box) }
                     .onExitCommand { renamingID = nil }
-                    // Losing focus commits too, so clicking elsewhere does not quietly
-                    // discard what was typed.
+                    // clicking away also commits (not just enter) - don't want to silently lose the edit
                     .onChange(of: renameFieldFocused) { _, focused in
                         if !focused, renamingID == box.id { commitRename(for: box) }
                     }

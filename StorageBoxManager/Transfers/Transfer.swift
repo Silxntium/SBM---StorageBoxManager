@@ -1,7 +1,6 @@
 import Foundation
 import Observation
 
-/// One queued or running file transfer, as shown in the transfer panel.
 @MainActor
 @Observable
 final class Transfer: Identifiable {
@@ -33,8 +32,7 @@ final class Transfer: Identifiable {
     let boxName: String
 
     var bytesDone: Int64 = 0
-    /// `-1` while the server has not told us the total.
-    var bytesTotal: Int64 = -1
+    var bytesTotal: Int64 = -1 // -1 = server hasn't told us the total yet
     var state: State = .waiting
 
     init(kind: Kind, name: String, boxName: String) {
@@ -43,8 +41,7 @@ final class Transfer: Identifiable {
         self.boxName = boxName
     }
 
-    /// Nil when the total is unknown, which makes the progress bar indeterminate.
-    var fractionCompleted: Double? {
+    var fractionCompleted: Double? { // nil -> indeterminate progress bar
         guard bytesTotal > 0 else { return nil }
         return min(1, Double(bytesDone) / Double(bytesTotal))
     }
@@ -67,8 +64,8 @@ final class Transfer: Identifiable {
     }
 }
 
-/// Rate-limits progress callbacks so a fast transfer does not schedule thousands of hops onto
-/// the main actor. Updates pass through on a 200 ms tick or a 1 MB jump, whichever comes first.
+// without this a fast transfer spams the main actor with thousands of updates. lets one through
+// every 200ms or every 1MB, whichever hits first
 final class ProgressThrottle: @unchecked Sendable {
     private let lock = NSLock()
     private var lastReported: Int64 = -1
@@ -77,8 +74,7 @@ final class ProgressThrottle: @unchecked Sendable {
     private let byteStep: Int64 = 1 << 20
     private let interval = Duration.milliseconds(200)
 
-    /// Returns true when this sample should be forwarded. Completion always passes.
-    func shouldReport(done: Int64, total: Int64) -> Bool {
+    func shouldReport(done: Int64, total: Int64) -> Bool { // completion always gets through
         lock.withLock {
             let now = ContinuousClock.now
             let isComplete = total > 0 && done >= total

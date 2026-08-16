@@ -12,9 +12,7 @@ struct MainWindow: View {
         } detail: {
             if let box = model.selectedBox {
                 FileBrowser(box: box)
-                    // A fresh browser per box: identity here is what stops one box's folder
-                    // listing from bleeding into the next one's view during loading.
-                    .id(box.id)
+                    .id(box.id) // forces a fresh view per box, otherwise switching mid-load gets weird
             } else {
                 NoBoxSelectedView()
             }

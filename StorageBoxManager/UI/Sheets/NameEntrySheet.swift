@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// Shared sheet for "new folder" and "rename" — both are a single name plus a confirm button.
-struct NameEntrySheet: View {
+struct NameEntrySheet: View { // shared by "new folder" and "rename", just a name field + confirm
     let title: String
     let prompt: String
     let initialText: String

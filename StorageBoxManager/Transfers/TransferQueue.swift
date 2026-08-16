@@ -1,16 +1,12 @@
 import Foundation
 import Observation
 
-/// Runs uploads and downloads with a bounded amount of concurrency.
-///
-/// Three at a time: enough to keep the link busy, few enough that a storage box does not start
-/// refusing connections when a folder full of files is dropped in at once.
 @MainActor
 @Observable
 final class TransferQueue {
     private(set) var transfers: [Transfer] = []
 
-    private let maxConcurrent = 3
+    private let maxConcurrent = 3 // more than this and the box starts refusing connections on a big batch
     private var running: [Transfer.ID: Task<Void, Never>] = [:]
     private var jobs: [Transfer.ID: Job] = [:]
 
@@ -55,9 +51,7 @@ final class TransferQueue {
         to localURL: URL,
         backend: any StorageBackend,
         boxName: String,
-        // The folder the user picked lives outside the sandbox; access has to be claimed for
-        // the whole transfer and released again afterwards.
-        securityScopedRoot: URL?,
+        securityScopedRoot: URL?, // outside the sandbox, gotta claim/release access around the transfer
         onSuccess: @escaping @MainActor () -> Void
     ) {
         let transfer = Transfer(kind: .download, name: item.name, boxName: boxName)
@@ -131,7 +125,7 @@ final class TransferQueue {
         if let task = running[id] {
             task.cancel()
         } else if let transfer = transfers.first(where: { $0.id == id }), transfer.state == .waiting {
-            // Never started, so there is no task to cancel — mark it directly.
+            // still queued, nothing to actually cancel, just flip the state
             transfer.state = .cancelled
             jobs.removeValue(forKey: id)
         }

@@ -1,12 +1,8 @@
 import Foundation
 
-/// Streams a GET response straight into the destination file.
-///
-/// A data task with a delegate is used instead of `URLSession.download(for:delegate:)` for two
-/// reasons: bytes land directly in the location the user picked, so nothing has to be moved
-/// out of a temporary directory afterwards, and progress plus cancellation are available
-/// without mixing a task-level delegate into the async download API, where the delegate and
-/// the awaited result both want to own the finished file.
+// data task + delegate instead of URLSession.download(for:delegate:) - writes straight to the
+// destination the user picked instead of a temp dir we'd have to move out of afterwards, and
+// this way progress/cancellation don't fight with the async download API over who owns the file
 final class StreamingDownloader: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let destination: URL
     private let pathDescription: String
@@ -20,9 +16,7 @@ final class StreamingDownloader: NSObject, URLSessionDataDelegate, @unchecked Se
     private var receivedBytes: Int64 = 0
     private var expectedBytes: Int64 = -1
     private var isFinished = false
-    /// Set by `cancel()` even before the URL task exists, so a cancellation that arrives
-    /// during setup is not lost.
-    private var cancelRequested = false
+    private var cancelRequested = false // can get set before `task` even exists, see run()
 
     init(
         destination: URL,
@@ -49,8 +43,8 @@ final class StreamingDownloader: NSObject, URLSessionDataDelegate, @unchecked Se
             throw BackendError.transport(error.localizedDescription)
         }
 
-        // A serial delegate queue means the callbacks below never run concurrently with
-        // each other; the lock only guards the handoff to and from the async caller.
+        // serial queue -> delegate callbacks below never overlap each other. lock is just for
+        // handing state back and forth with the async caller
         let queue = OperationQueue()
         queue.maxConcurrentOperationCount = 1
         queue.name = "de.silxnt.StorageBoxManager.download"
@@ -67,8 +61,8 @@ final class StreamingDownloader: NSObject, URLSessionDataDelegate, @unchecked Se
                     self.continuation = continuation
                     return cancelRequested
                 }
-                // Cancelling a task that has not been resumed yet produces no delegate
-                // callback, so that case is completed here instead of waiting forever.
+                // cancel before resume() = no delegate callback ever fires, so handle it here
+                // or this would just hang forever
                 if wasCancelledDuringSetup {
                     finish(with: URLError(.cancelled))
                 } else {
@@ -123,8 +117,8 @@ final class StreamingDownloader: NSObject, URLSessionDataDelegate, @unchecked Se
                 return (receivedBytes, expectedBytes)
             }
         } catch {
-            // Typically a full disk. Cancelling makes didCompleteWithError fire, which then
-            // reports this recorded error rather than the cancellation.
+            // probably disk full. cancel() triggers didCompleteWithError, which picks up
+            // this recorded error below instead of just reporting "cancelled"
             record(BackendError.transport(error.localizedDescription))
             dataTask.cancel()
             return
@@ -158,8 +152,8 @@ final class StreamingDownloader: NSObject, URLSessionDataDelegate, @unchecked Se
         }
         guard let outcome else { return }
 
-        // A recorded failure always wins: when a bad status or a write error cancelled the
-        // task, `error` is only the cancellation that followed from it.
+        // recorded failure wins if there is one - `error` here would just be the cancellation
+        // that a bad status / write error triggered, not the real reason
         let finalError: (any Error)?
         if let failure = outcome.failure {
             finalError = failure

@@ -19,7 +19,7 @@ struct FileBrowser: View {
             }
         }
         .task(id: box.id) {
-            // Rebuilt per box so a changed password or hostname takes effect immediately.
+            // rebuild per box so an updated password/hostname takes effect right away
             browser = BrowserModel(box: box, model: appModel)
             browser?.reload(force: false)
         }
@@ -99,8 +99,7 @@ struct FileBrowser: View {
         case .idle:
             loadingView(browser)
 
-        // Only while there is nothing to show yet — a refresh keeps the current list on
-        // screen instead of replacing it with a spinner.
+        // only when there's nothing on screen yet - a refresh should keep showing the old list
         case .loading where browser.items.isEmpty:
             loadingView(browser)
 
@@ -174,7 +173,7 @@ struct FileBrowser: View {
             }
             .width(min: 90, ideal: 130)
         }
-        // primaryAction is the double-click, which is what opens a folder.
+        // primaryAction = double click
         .contextMenu(forSelectionType: RemoteItem.ID.self) { ids in
             contextMenu(browser, ids: ids)
         } primaryAction: { ids in
@@ -280,7 +279,6 @@ struct FileBrowser: View {
     }
 }
 
-/// Clickable path from the box root down to the current folder.
 private struct BreadcrumbBar: View {
     let path: RemotePath
     let onSelect: (RemotePath) -> Void
