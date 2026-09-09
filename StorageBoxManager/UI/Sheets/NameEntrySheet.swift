@@ -19,26 +19,42 @@ struct NameEntrySheet: View { // shared by "new folder" and "rename", just a nam
         !trimmed.isEmpty && !trimmed.contains("/") && trimmed != "." && trimmed != ".."
     }
 
+    private var validationHint: String? {
+        if trimmed.isEmpty { return nil }
+        if trimmed.contains("/") { return "Names can't contain a slash." }
+        if trimmed == "." || trimmed == ".." { return "\"\(trimmed)\" isn't allowed as a name." }
+        return nil
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(title)
-                .font(.headline)
-
-            TextField(prompt, text: $text)
-                .textFieldStyle(.roundedBorder)
-                .focused($fieldFocused)
-                .onSubmit(confirm)
-
-            HStack {
-                Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
-                Button(confirmLabel, action: confirm)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!isValid)
+        NavigationStack {
+            Form {
+                Section {
+                    TextField(prompt, text: $text)
+                        .focused($fieldFocused)
+                        .onSubmit(confirm)
+                } footer: {
+                    if let validationHint {
+                        Text(validationHint)
+                            .foregroundStyle(.orange)
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle(title)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .keyboardShortcut(.cancelAction)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(confirmLabel, action: confirm)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(!isValid)
+                }
             }
         }
-        .padding(20)
-        .frame(width: 380)
+        .frame(width: 380, height: 190)
         .onAppear {
             text = initialText
             fieldFocused = true
@@ -50,4 +66,13 @@ struct NameEntrySheet: View { // shared by "new folder" and "rename", just a nam
         onConfirm(trimmed)
         dismiss()
     }
+}
+
+#Preview {
+    NameEntrySheet(
+        title: "New Folder",
+        prompt: "Folder name",
+        initialText: "",
+        confirmLabel: "Create"
+    ) { _ in }
 }

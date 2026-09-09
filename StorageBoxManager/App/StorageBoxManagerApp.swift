@@ -8,10 +8,16 @@ struct StorageBoxManagerApp: App {
         WindowGroup {
             MainWindow()
                 .environment(model)
+                .focusedSceneValue(\.appModel, model)
+                .frame(minWidth: 840, minHeight: 520)
         }
         .defaultSize(width: 1120, height: 720)
         .commands {
-            CommandGroup(replacing: .newItem) {}
+            AppCommands()
+        }
+
+        Settings {
+            GeneralSettingsView()
         }
     }
 }

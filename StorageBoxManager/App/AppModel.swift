@@ -1,16 +1,43 @@
 import Foundation
 import Observation
 
+enum BoxEditor: Identifiable, Hashable {
+    case new
+    case existing(StorageBox.ID)
+
+    var id: String {
+        switch self {
+        case .new: "new"
+        case .existing(let id): id.uuidString
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class AppModel {
     let store = BoxStore()
     let transfers = TransferQueue()
+    let favorites = FolderFavoriteStore()
     var selectedBoxID: StorageBox.ID?
+    var boxEditor: BoxEditor?
+    var showsTransfersInspector = false
+    var showsSidebar = true
+    var pendingFolder: RemotePath?
 
     var selectedBox: StorageBox? {
         guard let selectedBoxID else { return nil }
         return store.boxes.first { $0.id == selectedBoxID }
+    }
+
+    init() {
+        selectedBoxID = store.boxes.first?.id
+        favorites.prune(validBoxIDs: Set(store.boxes.map(\.id)))
+    }
+
+    func openFavorite(_ favorite: FolderFavorite) {
+        selectedBoxID = favorite.boxID
+        pendingFolder = favorite.path
     }
 
     func backend(for box: StorageBox) throws -> any StorageBackend {

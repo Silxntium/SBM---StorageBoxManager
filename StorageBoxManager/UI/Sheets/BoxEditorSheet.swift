@@ -14,6 +14,11 @@ struct BoxEditorSheet: View {
     @State private var symbolName = "externaldrive.fill"
     @State private var test: TestState = .idle
     @State private var saveError: String?
+    @FocusState private var focusedField: Field?
+
+    private enum Field: Hashable {
+        case name, host, username, password
+    }
 
     private enum TestState: Equatable {
         case idle
@@ -29,26 +34,37 @@ struct BoxEditorSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        NavigationStack {
             Form {
                 Section {
+                    HStack {
+                        Spacer()
+                        BoxIconView(symbolName: symbolName, tint: tint, size: 56)
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+
                     TextField("Name", text: $displayName, prompt: Text("e.g. Photos"))
-                    LabeledContent("Appearance") {
-                        HStack(spacing: 12) {
-                            symbolPicker
-                            tintPicker
-                        }
+                        .focused($focusedField, equals: .name)
+
+                    LabeledContent("Icon") {
+                        symbolGrid
+                    }
+
+                    LabeledContent("Color") {
+                        tintPicker
                     }
                 } header: {
                     Text("Display")
                 } footer: {
                     Text("This name is only used in this app — the server keeps its own hostname.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
 
-                Section("Connection") {
+                Section {
                     TextField("Server", text: $host, prompt: Text("u123456.your-storagebox.de"))
+                        .textContentType(.URL)
+                        .autocorrectionDisabled()
+                        .focused($focusedField, equals: .host)
                         .onChange(of: host) { _, new in
                             let normalized = AppModel.normalizeHost(new)
                             if normalized != new { host = normalized }
@@ -56,65 +72,123 @@ struct BoxEditorSheet: View {
                                 username = AppModel.suggestedUsername(forHost: normalized)
                             }
                         }
+
                     TextField("Username", text: $username, prompt: Text("u123456"))
+                        .textContentType(.username)
+                        .autocorrectionDisabled()
+                        .focused($focusedField, equals: .username)
+
                     SecureField(
                         "Password",
                         text: $password,
-                        prompt: Text(isEditing ? "leave unchanged" : "Password")
+                        prompt: Text(isEditing ? "Leave blank to keep current" : "Password")
                     )
+                    .textContentType(.password)
+                    .focused($focusedField, equals: .password)
+                } header: {
+                    Text("Connection")
+                } footer: {
+                    testStatusView
+                }
+
+                Section {
+                    Button {
+                        runTest()
+                    } label: {
+                        if test == .running {
+                            HStack {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Testing…")
+                            }
+                        } else {
+                            Label("Test Connection", systemImage: "bolt.horizontal")
+                        }
+                    }
+                    .disabled(!canSave || test == .running)
                 }
             }
             .formStyle(.grouped)
-
-            Divider()
-
-            HStack(spacing: 12) {
-                testStatusView
-                Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
-                Button("Test Connection") { runTest() }
-                    .disabled(!canSave || test == .running)
-                Button(isEditing ? "Save" : "Add") { save() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!canSave)
+            .navigationTitle(isEditing ? "Edit Box" : "Add Box")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .keyboardShortcut(.cancelAction)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(isEditing ? "Save" : "Add") { save() }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(!canSave)
+                }
             }
-            .padding(16)
         }
-        .frame(width: 520)
-        .onAppear(perform: loadExisting)
-        .alert("Couldn't Save", isPresented: .constant(saveError != nil)) {
+        .frame(minWidth: 460, idealWidth: 500, minHeight: 520)
+        .onAppear {
+            loadExisting()
+            focusedField = isEditing ? .name : .host
+        }
+        .alert("Couldn't Save", isPresented: saveErrorPresented) {
             Button("OK") { saveError = nil }
         } message: {
             Text(saveError ?? "")
         }
     }
 
-    // MARK: - Pieces
+    private var saveErrorPresented: Binding<Bool> {
+        Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )
+    }
 
-    private var symbolPicker: some View {
-        Picker("Icon", selection: $symbolName) {
+    private var symbolGrid: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 6) {
             ForEach(StorageBox.symbolChoices, id: \.self) { name in
-                Image(systemName: name).tag(name)
+                Button {
+                    symbolName = name
+                } label: {
+                    Image(systemName: name)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(symbolName == name ? tint.color : .secondary)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            symbolName == name ? tint.color.opacity(0.18) : Color.secondary.opacity(0.1),
+                            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help(name)
+                .accessibilityLabel(name)
+                .accessibilityAddTraits(symbolName == name ? .isSelected : [])
             }
         }
-        .labelsHidden()
-        .pickerStyle(.menu)
-        .frame(width: 70)
+        .frame(maxWidth: 220)
     }
 
     private var tintPicker: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             ForEach(BoxTint.allCases) { option in
-                Circle()
-                    .fill(option.color)
-                    .frame(width: 16, height: 16)
-                    .overlay {
-                        Circle()
-                            .strokeBorder(.primary, lineWidth: tint == option ? 2 : 0)
-                    }
-                    .onTapGesture { tint = option }
-                    .help(option.label)
-                    .accessibilityLabel(option.label)
+                Button {
+                    tint = option
+                } label: {
+                    Circle()
+                        .fill(option.color)
+                        .frame(width: 18, height: 18)
+                        .overlay {
+                            Circle()
+                                .strokeBorder(.white.opacity(0.9), lineWidth: tint == option ? 1.5 : 0)
+                        }
+                        .overlay {
+                            Circle()
+                                .strokeBorder(.primary.opacity(tint == option ? 0.55 : 0.15), lineWidth: tint == option ? 2 : 1)
+                                .padding(-3)
+                        }
+                }
+                .buttonStyle(.plain)
+                .frame(width: 24, height: 24)
+                .help(option.label)
+                .accessibilityLabel(option.label)
+                .accessibilityAddTraits(tint == option ? .isSelected : [])
             }
         }
     }
@@ -125,22 +199,17 @@ struct BoxEditorSheet: View {
         case .idle:
             EmptyView()
         case .running:
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.small)
-                Text("Testing…").foregroundStyle(.secondary)
-            }
+            Text("Checking the server…")
         case .succeeded:
             Label("Connected", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
         case .failed(let message):
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
-                .lineLimit(2)
+                .lineLimit(3)
                 .help(message)
         }
     }
-
-    // MARK: - Actions
 
     private func loadExisting() {
         guard let box else { return }
@@ -194,13 +263,13 @@ struct BoxEditorSheet: View {
             }
             // host/username changed -> that's part of the keychain key, so move the entry over
             if let box, box.host != host || box.username != username {
-                try? KeychainStore.deletePassword(host: box.host, account: box.username)
                 if password.isEmpty {
                     let carried = try KeychainStore.password(host: box.host, account: box.username) ?? ""
                     if !carried.isEmpty {
                         try KeychainStore.setPassword(carried, host: host, account: username)
                     }
                 }
+                try? KeychainStore.deletePassword(host: box.host, account: box.username)
             }
 
             if box == nil {
@@ -222,4 +291,9 @@ struct BoxEditorSheet: View {
         }
         return error.localizedDescription
     }
+}
+
+#Preview("Add") {
+    BoxEditorSheet(box: nil)
+        .environment(AppModel())
 }

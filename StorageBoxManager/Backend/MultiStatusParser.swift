@@ -12,6 +12,8 @@ enum MultiStatusParser {
         var lastModified: Date?
         var contentType: String?
         var etag: String?
+        var quotaUsed: Int64?
+        var quotaAvailable: Int64?
         var responseStatus: Int? // set on partial-failure DELETE responses, nil for normal PROPFIND
     }
 
@@ -143,6 +145,12 @@ private final class ParserDelegate: NSObject, XMLParserDelegate {
         }
         if let raw = pendingProperties["getetag"], !raw.isEmpty {
             currentEntry?.etag = raw
+        }
+        if let raw = pendingProperties["quota-used-bytes"], let used = Int64(raw) {
+            currentEntry?.quotaUsed = used
+        }
+        if let raw = pendingProperties["quota-available-bytes"], let available = Int64(raw) {
+            currentEntry?.quotaAvailable = available
         }
     }
 

@@ -93,6 +93,8 @@ struct WebDAVBackend: StorageBackend {
             <getlastmodified/>
             <getcontenttype/>
             <getetag/>
+            <quota-available-bytes/>
+            <quota-used-bytes/>
           </prop>
         </propfind>
         """.utf8)
@@ -112,16 +114,25 @@ struct WebDAVBackend: StorageBackend {
         try await send(request, path: .root, accepting: [207, 200])
     }
 
-    func list(_ path: RemotePath) async throws -> [RemoteItem] {
+    func inspect(_ path: RemotePath) async throws -> FolderListing {
         // NOTE: depth infinity gets rejected by Apache (DavDepthInfinity off by default), so we
         // walk one level at a time instead. cost us an hour to figure out the first time.
         let request = try propfindRequest(path: path, depth: "1")
         let data = try await send(request, path: path, accepting: [207, 200])
+        let entries = try MultiStatusParser.parse(data)
 
-        return try MultiStatusParser.parse(data)
-            .map { entry -> RemoteItem in
-                let itemPath = RemotePath(href: entry.href)
-                return RemoteItem(
+        var quota: StorageQuota?
+        var items: [RemoteItem] = []
+        for entry in entries {
+            let itemPath = RemotePath(href: entry.href)
+            if itemPath == path {
+                if entry.quotaUsed != nil || entry.quotaAvailable != nil {
+                    quota = StorageQuota(usedBytes: entry.quotaUsed, availableBytes: entry.quotaAvailable)
+                }
+                continue
+            }
+            items.append(
+                RemoteItem(
                     path: itemPath,
                     isDirectory: entry.isCollection,
                     size: entry.contentLength,
@@ -129,8 +140,49 @@ struct WebDAVBackend: StorageBackend {
                     contentType: entry.contentType,
                     etag: entry.etag
                 )
+            )
+        }
+        return FolderListing(items: items, quota: quota)
+    }
+
+    func resourceSize(at path: RemotePath) async throws -> Int64? {
+        let request = try makeRequest("HEAD", path: path, isDirectory: false)
+        do {
+            let (_, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                throw BackendError.malformedResponse("keine HTTP-Antwort")
             }
-            .filter { $0.path != path } // propfind includes the folder itself as entry #1, drop it
+            if http.statusCode == 404 { return nil }
+            guard (200..<300).contains(http.statusCode) else {
+                if http.statusCode == 405 { return try await propfindSize(at: path) }
+                throw BackendError.from(status: http.statusCode, path: path.displayPath)
+            }
+            if http.expectedContentLength > 0 { return http.expectedContentLength }
+            if let raw = http.value(forHTTPHeaderField: "Content-Length"), let length = Int64(raw) {
+                return length
+            }
+            return try await propfindSize(at: path)
+        } catch let error as BackendError {
+            throw error
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        } catch {
+            return try await propfindSize(at: path)
+        }
+    }
+
+    private func propfindSize(at path: RemotePath) async throws -> Int64? {
+        do {
+            var request = try makeRequest("PROPFIND", path: path, isDirectory: false)
+            request.setValue("0", forHTTPHeaderField: "Depth")
+            request.setValue("application/xml; charset=utf-8", forHTTPHeaderField: "Content-Type")
+            request.httpBody = Self.propfindBody
+            let data = try await send(request, path: path, accepting: [207, 200])
+            return try MultiStatusParser.parse(data).first?.contentLength
+        } catch let error as BackendError {
+            if case .notFound = error { return nil }
+            throw error
+        }
     }
 
     func createDirectory(at path: RemotePath) async throws {
@@ -145,6 +197,24 @@ struct WebDAVBackend: StorageBackend {
         var request = try makeRequest("MOVE", path: source, isDirectory: isDirectory)
         request.setValue(destinationURL.absoluteString, forHTTPHeaderField: "Destination")
         request.setValue("F", forHTTPHeaderField: "Overwrite") // "F" = don't clobber an existing file, fail instead
+
+        do {
+            try await send(request, path: source, accepting: [201, 204])
+        } catch BackendError.alreadyExists {
+            throw BackendError.alreadyExists(destination.name)
+        }
+    }
+
+    func copy(from source: RemotePath, to destination: RemotePath, isDirectory: Bool) async throws {
+        guard let destinationURL = destination.url(relativeTo: baseURL, isDirectory: isDirectory) else {
+            throw BackendError.malformedResponse("destination path doesn't form a valid URL")
+        }
+        var request = try makeRequest("COPY", path: source, isDirectory: isDirectory)
+        request.setValue(destinationURL.absoluteString, forHTTPHeaderField: "Destination")
+        request.setValue("F", forHTTPHeaderField: "Overwrite")
+        if isDirectory {
+            request.setValue("infinity", forHTTPHeaderField: "Depth")
+        }
 
         do {
             try await send(request, path: source, accepting: [201, 204])
@@ -181,10 +251,44 @@ struct WebDAVBackend: StorageBackend {
         to path: RemotePath,
         onProgress: @escaping @Sendable (Int64, Int64) -> Void
     ) async throws {
+        let localSize = (try? localURL.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
+        if localSize > 0 { onProgress(0, localSize) }
+
+        let remoteSize = try await resourceSize(at: path)
+        if let remoteSize, remoteSize == localSize, localSize > 0 {
+            onProgress(localSize, localSize)
+            return
+        }
+
+        if let remoteSize, remoteSize > 0, remoteSize < localSize {
+            do {
+                try await uploadSlice(
+                    localURL,
+                    to: path,
+                    offset: remoteSize,
+                    total: localSize,
+                    onProgress: onProgress
+                )
+                return
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                Self.logger.info("ranged upload not accepted, sending the whole file")
+            }
+        }
+
+        try await uploadFull(localURL, to: path, onProgress: onProgress)
+    }
+
+    private func uploadFull(
+        _ localURL: URL,
+        to path: RemotePath,
+        onProgress: @escaping @Sendable (Int64, Int64) -> Void
+    ) async throws {
         var request = try makeRequest("PUT", path: path, isDirectory: false)
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
 
-        let delegate = UploadProgressDelegate(onProgress: onProgress)
+        let delegate = UploadProgressDelegate(offset: 0, total: nil, onProgress: onProgress)
         let data: Data
         let response: URLResponse
         do {
@@ -205,6 +309,27 @@ struct WebDAVBackend: StorageBackend {
         }
     }
 
+    private func uploadSlice(
+        _ localURL: URL,
+        to path: RemotePath,
+        offset: Int64,
+        total: Int64,
+        onProgress: @escaping @Sendable (Int64, Int64) -> Void
+    ) async throws {
+        var request = try makeRequest("PUT", path: path, isDirectory: false)
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.setValue("bytes \(offset)-\(total - 1)/\(total)", forHTTPHeaderField: "Content-Range")
+        request.setValue(String(total - offset), forHTTPHeaderField: "Content-Length")
+        try await OffsetFileUploader.upload(
+            request: request,
+            fileURL: localURL,
+            offset: offset,
+            total: total,
+            configuration: configuration,
+            onProgress: onProgress
+        )
+    }
+
     // MARK: - Helpers
 
     private static func firstFailure(inMultiStatus data: Data) -> (path: String, status: Int)? {
@@ -218,9 +343,13 @@ struct WebDAVBackend: StorageBackend {
 }
 
 private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let offset: Int64
+    private let total: Int64?
     private let onProgress: @Sendable (Int64, Int64) -> Void
 
-    init(onProgress: @escaping @Sendable (Int64, Int64) -> Void) {
+    init(offset: Int64, total: Int64?, onProgress: @escaping @Sendable (Int64, Int64) -> Void) {
+        self.offset = offset
+        self.total = total
         self.onProgress = onProgress
     }
 
@@ -231,6 +360,7 @@ private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, @u
         totalBytesSent: Int64,
         totalBytesExpectedToSend: Int64
     ) {
-        onProgress(totalBytesSent, totalBytesExpectedToSend)
+        let expected = total ?? (offset + totalBytesExpectedToSend)
+        onProgress(offset + totalBytesSent, expected)
     }
 }

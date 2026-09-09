@@ -3,53 +3,28 @@ import SwiftUI
 struct BoxSidebar: View {
     @Environment(AppModel.self) private var model
 
-    @State private var editor: EditorTarget?
     @State private var renamingID: StorageBox.ID?
     @State private var draftName = ""
     @State private var boxPendingRemoval: StorageBox?
     @FocusState private var renameFieldFocused: Bool
 
-    private enum EditorTarget: Identifiable {
-        case new
-        case existing(StorageBox)
-
-        var id: String {
-            switch self {
-            case .new: "new"
-            case .existing(let box): box.id.uuidString
-            }
-        }
-    }
-
     var body: some View {
         @Bindable var model = model
 
-        List(selection: $model.selectedBoxID) {
-            ForEach(model.store.boxes) { box in
-                row(for: box)
-                    .tag(box.id)
+        Group {
+            if model.store.boxes.isEmpty {
+                emptyState
+            } else {
+                boxList
             }
-            .onMove { model.store.move(fromOffsets: $0, toOffset: $1) }
         }
-        .listStyle(.sidebar)
-        .navigationTitle("Storage Boxes")
-        .safeAreaInset(edge: .bottom) {
-            Button {
-                editor = .new
-            } label: {
-                Label("Add Box", systemImage: "plus")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.accessoryBar)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-        }
-        .sheet(item: $editor) { target in
-            switch target {
-            case .new:
-                BoxEditorSheet(box: nil)
-            case .existing(let box):
-                BoxEditorSheet(box: box)
+        .navigationTitle("Boxes")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Add Box", systemImage: "plus") {
+                    model.boxEditor = .new
+                }
+                .help("Add a storage box")
             }
         }
         .confirmationDialog(
@@ -64,6 +39,10 @@ struct BoxSidebar: View {
                 if let box = boxPendingRemoval {
                     if model.selectedBoxID == box.id { model.selectedBoxID = nil }
                     model.store.remove(box)
+                    model.favorites.prune(validBoxIDs: Set(model.store.boxes.map(\.id)))
+                    if model.selectedBoxID == nil {
+                        model.selectedBoxID = model.store.boxes.first?.id
+                    }
                 }
                 boxPendingRemoval = nil
             }
@@ -73,13 +52,60 @@ struct BoxSidebar: View {
         }
     }
 
+    private var emptyState: some View {
+        ContentUnavailableView {
+            Label("No Boxes", systemImage: "externaldrive")
+        } description: {
+            Text("Add a storage box to start browsing files.")
+        } actions: {
+            Button("Add Box") {
+                model.boxEditor = .new
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var boxList: some View {
+        @Bindable var model = model
+
+        return List(selection: $model.selectedBoxID) {
+            Section("Boxes") {
+                ForEach(model.store.boxes) { box in
+                    row(for: box)
+                        .tag(box.id)
+                }
+                .onMove { model.store.move(fromOffsets: $0, toOffset: $1) }
+            }
+
+            if !model.favorites.favorites.isEmpty {
+                Section("Favorites") {
+                    ForEach(model.favorites.favorites) { favorite in
+                        favoriteRow(favorite)
+                    }
+                }
+            }
+        }
+        .listStyle(.sidebar)
+        .contextMenu(forSelectionType: StorageBox.ID.self) { ids in
+            if ids.count == 1, let id = ids.first, let box = model.store.boxes.first(where: { $0.id == id }) {
+                Button("Rename") { beginRename(box) }
+                Button("Edit…") { model.boxEditor = .existing(box.id) }
+                Divider()
+                Button("Remove…", role: .destructive) { boxPendingRemoval = box }
+            }
+        }
+        .onDeleteCommand {
+            if let box = model.selectedBox {
+                boxPendingRemoval = box
+            }
+        }
+    }
+
     @ViewBuilder
     private func row(for box: StorageBox) -> some View {
-        HStack(spacing: 9) {
-            Image(systemName: box.symbolName)
-                .foregroundStyle(box.tint.color)
-                .imageScale(.large)
-                .frame(width: 20)
+        HStack(spacing: 10) {
+            BoxIconView(symbolName: box.symbolName, tint: box.tint, size: 28)
 
             if renamingID == box.id {
                 TextField("Name", text: $draftName)
@@ -94,21 +120,53 @@ struct BoxSidebar: View {
             } else {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(box.resolvedName)
+                        .font(.body)
                         .lineLimit(1)
                     Text(box.host)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
+                .accessibilityElement(children: .combine)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
         .contextMenu {
             Button("Rename") { beginRename(box) }
-            Button("Edit…") { editor = .existing(box) }
+            Button("Edit…") { model.boxEditor = .existing(box.id) }
             Divider()
             Button("Remove…", role: .destructive) { boxPendingRemoval = box }
         }
+    }
+
+    private func favoriteRow(_ favorite: FolderFavorite) -> some View {
+        let box = model.store.boxes.first { $0.id == favorite.boxID }
+        return Button {
+            model.openFavorite(favorite)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "star.fill")
+                    .foregroundStyle(.yellow)
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(favorite.title)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(box?.resolvedName ?? favorite.path.displayPath)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button("Remove from Favorites", role: .destructive) {
+                model.favorites.remove(favorite)
+            }
+        }
+        .help(favorite.path.displayPath)
     }
 
     private func beginRename(_ box: StorageBox) {

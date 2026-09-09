@@ -2,81 +2,68 @@ import SwiftUI
 
 struct TransfersPanel: View {
     @Environment(AppModel.self) private var model
-    @State private var isExpanded = true
 
     var body: some View {
-        let queue = model.transfers
-
-        if !queue.transfers.isEmpty {
-            VStack(spacing: 0) {
-                Divider()
-                header(queue)
-                if isExpanded {
-                    Divider()
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(queue.transfers) { transfer in
-                                TransferRow(transfer: transfer) { queue.cancel(transfer.id) }
-                                Divider().padding(.leading, 34)
-                            }
-                        }
+        NavigationStack {
+            Group {
+                if model.transfers.transfers.isEmpty {
+                    ContentUnavailableView(
+                        "No Transfers",
+                        systemImage: "arrow.up.arrow.down.circle",
+                        description: Text("Uploads and downloads will show up here.")
+                    )
+                } else {
+                    List(model.transfers.transfers) { transfer in
+                        TransferRow(
+                            transfer: transfer,
+                            onCancel: { model.transfers.cancel(transfer.id) },
+                            onRetry: { model.transfers.retry(transfer.id) }
+                        )
                     }
-                    .frame(maxHeight: 170)
+                    .listStyle(.plain)
                 }
             }
-            .background(.bar)
-        }
-    }
-
-    private func header(_ queue: TransferQueue) -> some View {
-        HStack(spacing: 8) {
-            Button {
-                withAnimation(.snappy(duration: 0.18)) { isExpanded.toggle() }
-            } label: {
-                Image(systemName: "chevron.right")
-                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-
-            Text(queue.activeCount > 0
-                 ? "\(queue.activeCount) transfer\(queue.activeCount == 1 ? "" : "s") active"
-                 : "Transfers")
-                .font(.callout.weight(.medium))
-
-            if queue.activeCount > 0 {
-                ProgressView().controlSize(.small)
-            }
-
-            Spacer()
-
-            if queue.activeCount > 0 {
-                Button("Cancel All") { queue.cancelAll() }
-                    .buttonStyle(.accessoryBar)
-            }
-            if queue.hasFinishedEntries {
-                Button("Clear List") { queue.clearFinished() }
-                    .buttonStyle(.accessoryBar)
+            .navigationTitle("Transfers")
+            .toolbar {
+                if model.transfers.hasRetryableTransfers {
+                    ToolbarItem(placement: .automatic) {
+                        Button("Retry Failed") { model.transfers.retryAllFailed() }
+                            .help("Retry failed and cancelled transfers")
+                    }
+                }
+                if model.transfers.activeCount > 0 {
+                    ToolbarItem(placement: .automatic) {
+                        Button("Cancel All") { model.transfers.cancelAll() }
+                    }
+                }
+                if model.transfers.hasFinishedEntries {
+                    ToolbarItem(placement: .automatic) {
+                        Button("Clear") { model.transfers.clearFinished() }
+                            .help("Remove finished transfers")
+                    }
+                }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
     }
 }
 
 private struct TransferRow: View {
     let transfer: Transfer
     let onCancel: () -> Void
+    let onRetry: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             Image(systemName: symbolName)
+                .font(.title3)
                 .foregroundStyle(symbolColor)
-                .frame(width: 18)
+                .symbolRenderingMode(.hierarchical)
+                .frame(width: 24)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(transfer.name)
+                        .font(.body)
                         .lineLimit(1)
                     Text(transfer.boxName)
                         .font(.caption)
@@ -94,25 +81,58 @@ private struct TransferRow: View {
                     }
                 }
 
-                Text(transfer.progressDescription)
-                    .font(.caption)
-                    .foregroundStyle(isFailed ? .red : .secondary)
-                    .lineLimit(1)
+                HStack {
+                    Text(transfer.progressDescription)
+                        .font(.caption)
+                        .foregroundStyle(isFailed ? Color.red : .secondary)
+                        .lineLimit(2)
+                    if let fraction = transfer.fractionCompleted, transfer.state == .running {
+                        Spacer(minLength: 8)
+                        Text(fraction, format: .percent.precision(.fractionLength(0)))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if let rate = transfer.rateDescription {
+                    Text(rate)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
 
-            if transfer.state.isActive {
-                Button {
-                    onCancel()
-                } label: {
+            if transfer.canRetry {
+                Button(action: onRetry) {
+                    Image(systemName: "arrow.clockwise.circle.fill")
+                        .foregroundStyle(.secondary)
+                        .imageScale(.large)
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .help("Retry")
+                .accessibilityLabel("Retry \(transfer.name)")
+            } else if transfer.state.isActive {
+                Button(action: onCancel) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
+                        .imageScale(.large)
+                        .frame(width: 24, height: 24)
                 }
                 .buttonStyle(.plain)
                 .help("Cancel")
+                .accessibilityLabel("Cancel \(transfer.name)")
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            if transfer.canRetry {
+                Button("Retry", action: onRetry)
+            } else if transfer.state.isActive {
+                Button("Cancel", role: .destructive, action: onCancel)
+            }
+        }
     }
 
     private var isFailed: Bool {

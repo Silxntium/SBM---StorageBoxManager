@@ -75,3 +75,97 @@ final class BoxStore {
         }
     }
 }
+
+struct FolderFavorite: Identifiable, Hashable, Codable, Sendable {
+    var id: UUID
+    var boxID: UUID
+    var segments: [String]
+    var title: String
+
+    var path: RemotePath { RemotePath(segments: segments) }
+}
+
+@MainActor
+@Observable
+final class FolderFavoriteStore {
+    private(set) var favorites: [FolderFavorite] = []
+
+    private let fileURL: URL
+    private let logger = Logger(subsystem: "de.silxnt.StorageBoxManager", category: "Favorites")
+
+    init(fileURL: URL? = nil) {
+        if let fileURL {
+            self.fileURL = fileURL
+        } else {
+            let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("StorageBoxManager", isDirectory: true)
+            try? FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+            self.fileURL = support.appendingPathComponent("favorites.json")
+        }
+        load()
+    }
+
+    func favorites(for boxID: StorageBox.ID) -> [FolderFavorite] {
+        favorites.filter { $0.boxID == boxID }
+    }
+
+    func contains(boxID: StorageBox.ID, path: RemotePath) -> Bool {
+        favorites.contains { $0.boxID == boxID && $0.segments == path.segments }
+    }
+
+    func toggle(boxID: StorageBox.ID, path: RemotePath, title: String) {
+        if let existing = favorites.first(where: { $0.boxID == boxID && $0.segments == path.segments }) {
+            remove(existing)
+        } else {
+            favorites.append(
+                FolderFavorite(id: UUID(), boxID: boxID, segments: path.segments, title: title)
+            )
+            save()
+        }
+    }
+
+    func remove(_ favorite: FolderFavorite) {
+        favorites.removeAll { $0.id == favorite.id }
+        save()
+    }
+
+    func prune(validBoxIDs: Set<UUID>) {
+        let before = favorites.count
+        favorites.removeAll { !validBoxIDs.contains($0.boxID) }
+        if favorites.count != before { save() }
+    }
+
+    private func load() {
+        guard let data = try? Data(contentsOf: fileURL) else { return }
+        do {
+            favorites = try JSONDecoder().decode([FolderFavorite].self, from: data)
+        } catch {
+            logger.error("failed to read favorites.json: \(error.localizedDescription)")
+        }
+    }
+
+    private func save() {
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(favorites).write(to: fileURL, options: .atomic)
+        } catch {
+            logger.error("failed to write favorites.json: \(error.localizedDescription)")
+        }
+    }
+}
+
+enum LastPathStore {
+    private static func key(for boxID: UUID) -> String {
+        "lastPath.\(boxID.uuidString)"
+    }
+
+    static func load(for boxID: UUID) -> RemotePath? {
+        guard let segments = UserDefaults.standard.stringArray(forKey: key(for: boxID)) else { return nil }
+        return RemotePath(segments: segments)
+    }
+
+    static func save(_ path: RemotePath, for boxID: UUID) {
+        UserDefaults.standard.set(path.segments, forKey: key(for: boxID))
+    }
+}

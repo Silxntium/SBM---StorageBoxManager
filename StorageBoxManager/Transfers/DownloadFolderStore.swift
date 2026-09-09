@@ -57,11 +57,13 @@ enum DownloadFolderStore {
     @MainActor
     static func promptForUploadFiles() -> [URL] {
         let panel = NSOpenPanel()
-        panel.title = String(localized: "Upload Files")
+        panel.title = String(localized: "Upload")
+        panel.message = String(localized: "Choose files or folders to upload.")
         panel.prompt = String(localized: "Upload")
         panel.canChooseFiles = true
-        panel.canChooseDirectories = false
+        panel.canChooseDirectories = true
         panel.allowsMultipleSelection = true
+        panel.treatsFilePackagesAsDirectories = true
 
         guard panel.runModal() == .OK else { return [] }
         return panel.urls

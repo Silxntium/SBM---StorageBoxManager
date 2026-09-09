@@ -15,8 +15,10 @@ final class StreamingDownloader: NSObject, URLSessionDataDelegate, @unchecked Se
     private var recordedFailure: (any Error)?
     private var receivedBytes: Int64 = 0
     private var expectedBytes: Int64 = -1
+    private var startOffset: Int64 = 0
     private var isFinished = false
     private var cancelRequested = false // can get set before `task` even exists, see run()
+    private var preservePartial = true
 
     init(
         destination: URL,
@@ -31,16 +33,28 @@ final class StreamingDownloader: NSObject, URLSessionDataDelegate, @unchecked Se
     func run(request: URLRequest, configuration: URLSessionConfiguration) async throws {
         try Task.checkCancellation()
 
+        var request = request
         let fileManager = FileManager.default
-        try? fileManager.removeItem(at: destination)
-        guard fileManager.createFile(atPath: destination.path(percentEncoded: false), contents: nil) else {
-            throw BackendError.transport("couldn't create destination file \"\(destination.lastPathComponent)\"")
-        }
-        do {
+        let existing = (try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
+
+        if existing > 0 {
+            startOffset = existing
+            receivedBytes = existing
+            request.setValue("bytes=\(existing)-", forHTTPHeaderField: "Range")
             let handle = try FileHandle(forWritingTo: destination)
+            try handle.seekToEnd()
             lock.withLock { self.handle = handle }
-        } catch {
-            throw BackendError.transport(error.localizedDescription)
+        } else {
+            try? fileManager.removeItem(at: destination)
+            guard fileManager.createFile(atPath: destination.path(percentEncoded: false), contents: nil) else {
+                throw BackendError.transport("couldn't create destination file \"\(destination.lastPathComponent)\"")
+            }
+            do {
+                let handle = try FileHandle(forWritingTo: destination)
+                lock.withLock { self.handle = handle }
+            } catch {
+                throw BackendError.transport(error.localizedDescription)
+            }
         }
 
         // serial queue -> delegate callbacks below never overlap each other. lock is just for
@@ -91,19 +105,47 @@ final class StreamingDownloader: NSObject, URLSessionDataDelegate, @unchecked Se
         completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
     ) {
         guard let http = response as? HTTPURLResponse else {
-            record(BackendError.malformedResponse("keine HTTP-Antwort"))
-            completionHandler(.cancel)
-            return
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            record(BackendError.from(status: http.statusCode, path: pathDescription))
+            record(BackendError.malformedResponse("keine HTTP-Antwort"), preservePartial: false)
             completionHandler(.cancel)
             return
         }
 
-        let expected = http.expectedContentLength
+        if http.statusCode == 416 {
+            completionHandler(.cancel)
+            finish(with: nil)
+            return
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
+            record(BackendError.from(status: http.statusCode, path: pathDescription), preservePartial: http.statusCode < 500)
+            completionHandler(.cancel)
+            return
+        }
+
+        if http.statusCode == 200, startOffset > 0 {
+            do {
+                try lock.withLock {
+                    try handle?.truncate(atOffset: 0)
+                    try handle?.seek(toOffset: 0)
+                    receivedBytes = 0
+                    startOffset = 0
+                }
+            } catch {
+                record(BackendError.transport(error.localizedDescription), preservePartial: false)
+                completionHandler(.cancel)
+                return
+            }
+        }
+
+        let expected: Int64
+        if http.statusCode == 206, let total = Self.contentRangeTotal(http.value(forHTTPHeaderField: "Content-Range")) {
+            expected = total
+        } else {
+            let length = http.expectedContentLength
+            expected = length > 0 ? startOffset + length : length
+        }
         lock.withLock { expectedBytes = expected }
-        onProgress(0, expected)
+        onProgress(receivedBytes, expected)
         completionHandler(.allow)
     }
 
@@ -119,7 +161,7 @@ final class StreamingDownloader: NSObject, URLSessionDataDelegate, @unchecked Se
         } catch {
             // probably disk full. cancel() triggers didCompleteWithError, which picks up
             // this recorded error below instead of just reporting "cancelled"
-            record(BackendError.transport(error.localizedDescription))
+            record(BackendError.transport(error.localizedDescription), preservePartial: true)
             dataTask.cancel()
             return
         }
@@ -132,14 +174,15 @@ final class StreamingDownloader: NSObject, URLSessionDataDelegate, @unchecked Se
 
     // MARK: - Completion
 
-    private func record(_ error: any Error) {
+    private func record(_ error: any Error, preservePartial: Bool) {
         lock.withLock {
             if recordedFailure == nil { recordedFailure = error }
+            if !preservePartial { self.preservePartial = false }
         }
     }
 
     private func finish(with error: (any Error)?) {
-        let outcome: (continuation: CheckedContinuation<Void, any Error>?, failure: (any Error)?)? = lock.withLock {
+        let outcome: (continuation: CheckedContinuation<Void, any Error>?, failure: (any Error)?, keepPartial: Bool, received: Int64)? = lock.withLock {
             guard !isFinished else { return nil }
             isFinished = true
 
@@ -148,7 +191,7 @@ final class StreamingDownloader: NSObject, URLSessionDataDelegate, @unchecked Se
             try? handle?.close()
             handle = nil
 
-            return (continuation, recordedFailure)
+            return (continuation, recordedFailure, preservePartial, receivedBytes)
         }
         guard let outcome else { return }
 
@@ -166,10 +209,31 @@ final class StreamingDownloader: NSObject, URLSessionDataDelegate, @unchecked Se
         }
 
         if let finalError {
-            try? FileManager.default.removeItem(at: destination)
+            let keep = outcome.keepPartial && outcome.received > 0 && !(finalError is BackendError && isClientFailure(finalError))
+            if !keep {
+                try? FileManager.default.removeItem(at: destination)
+            }
             outcome.continuation?.resume(throwing: finalError)
         } else {
             outcome.continuation?.resume()
         }
+    }
+
+    private func isClientFailure(_ error: any Error) -> Bool {
+        guard let backend = error as? BackendError else { return false }
+        switch backend {
+        case .notFound, .authenticationFailed, .forbidden:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func contentRangeTotal(_ header: String?) -> Int64? {
+        guard let header else { return nil }
+        // "bytes 100-199/400" or "bytes 100-199/*"
+        guard let slash = header.lastIndex(of: "/") else { return nil }
+        let total = header[header.index(after: slash)...]
+        return Int64(total)
     }
 }

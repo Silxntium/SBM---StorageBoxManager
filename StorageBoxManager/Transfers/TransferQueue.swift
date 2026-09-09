@@ -21,24 +21,40 @@ final class TransferQueue {
     }
 
     var hasFinishedEntries: Bool {
-        transfers.contains { !$0.state.isActive }
+        transfers.contains { $0.state == .finished }
+    }
+
+    var hasRetryableTransfers: Bool {
+        transfers.contains { $0.canRetry }
     }
 
     // MARK: - Enqueueing
 
     func upload(
         _ localURL: URL,
-        to path: RemotePath,
+        to destination: RemotePath,
         backend: any StorageBackend,
+        boxID: StorageBox.ID,
         boxName: String,
+        displayName: String? = nil,
+        securityScopedRoot: URL? = nil,
         onSuccess: @escaping @MainActor () -> Void
     ) {
-        let destination = path.appending(localURL.lastPathComponent)
-        let transfer = Transfer(kind: .upload, name: localURL.lastPathComponent, boxName: boxName)
+        let transfer = Transfer(
+            kind: .upload,
+            name: displayName ?? destination.name,
+            boxName: boxName,
+            boxID: boxID
+        )
         enqueue(
             Job(
                 transfer: transfer,
                 body: { progress in
+                    let claimed = securityScopedRoot?.startAccessingSecurityScopedResource() ?? false
+                    defer { if claimed { securityScopedRoot?.stopAccessingSecurityScopedResource() } }
+                    if let size = try? localURL.resourceValues(forKeys: [.fileSizeKey]).fileSize, size > 0 {
+                        progress(0, Int64(size))
+                    }
                     try await backend.upload(localURL, to: destination, onProgress: progress)
                 },
                 onSuccess: onSuccess
@@ -47,15 +63,22 @@ final class TransferQueue {
     }
 
     func download(
-        _ item: RemoteItem,
+        path: RemotePath,
         to localURL: URL,
         backend: any StorageBackend,
+        boxID: StorageBox.ID,
         boxName: String,
+        displayName: String? = nil,
         securityScopedRoot: URL?, // outside the sandbox, gotta claim/release access around the transfer
+        kind: Transfer.Kind = .download,
         onSuccess: @escaping @MainActor () -> Void
     ) {
-        let transfer = Transfer(kind: .download, name: item.name, boxName: boxName)
-        let path = item.path
+        let transfer = Transfer(
+            kind: kind,
+            name: displayName ?? path.name,
+            boxName: boxName,
+            boxID: boxID
+        )
         enqueue(
             Job(
                 transfer: transfer,
@@ -93,8 +116,7 @@ final class TransferQueue {
         let report: @Sendable (Int64, Int64) -> Void = { done, total in
             guard throttle.shouldReport(done: done, total: total) else { return }
             Task { @MainActor in
-                transfer.bytesDone = done
-                transfer.bytesTotal = total
+                transfer.recordProgress(done: done, total: total)
             }
         }
 
@@ -103,31 +125,48 @@ final class TransferQueue {
                 try await job.body(report)
                 transfer.state = .finished
                 if transfer.bytesTotal > 0 { transfer.bytesDone = transfer.bytesTotal }
+                transfer.bytesPerSecond = nil
                 job.onSuccess()
+                self?.completed(transfer.id, succeeded: true)
             } catch is CancellationError {
                 transfer.state = .cancelled
+                transfer.bytesPerSecond = nil
+                self?.completed(transfer.id, succeeded: false)
             } catch {
                 transfer.state = .failed(BrowserModel.describe(error))
+                transfer.bytesPerSecond = nil
+                self?.completed(transfer.id, succeeded: false)
             }
-            self?.completed(transfer.id)
         }
     }
 
-    private func completed(_ id: Transfer.ID) {
+    private func completed(_ id: Transfer.ID, succeeded: Bool) {
         running.removeValue(forKey: id)
-        jobs.removeValue(forKey: id)
+        if succeeded {
+            jobs.removeValue(forKey: id)
+        }
         pump()
     }
 
     // MARK: - Control
 
+    func retry(_ id: Transfer.ID) {
+        guard let transfer = transfers.first(where: { $0.id == id }), transfer.canRetry, jobs[id] != nil else { return }
+        transfer.prepareForRetry()
+        pump()
+    }
+
+    func retryAllFailed() {
+        for transfer in transfers where transfer.canRetry {
+            retry(transfer.id)
+        }
+    }
+
     func cancel(_ id: Transfer.ID) {
         if let task = running[id] {
             task.cancel()
         } else if let transfer = transfers.first(where: { $0.id == id }), transfer.state == .waiting {
-            // still queued, nothing to actually cancel, just flip the state
             transfer.state = .cancelled
-            jobs.removeValue(forKey: id)
         }
     }
 
@@ -138,6 +177,10 @@ final class TransferQueue {
     }
 
     func clearFinished() {
-        transfers.removeAll { !$0.state.isActive }
+        let finishedIDs = Set(transfers.filter { $0.state == .finished }.map(\.id))
+        transfers.removeAll { $0.state == .finished }
+        for id in finishedIDs {
+            jobs.removeValue(forKey: id)
+        }
     }
 }

@@ -25,9 +25,13 @@ warning on launch.
 ## Features
 
 - Multiple boxes, each with its own name, color, and icon
-- File browser with breadcrumbs, sorting, and multi-select
-- Create folders, rename, delete
-- Upload/download single files with progress, via drag & drop or a file picker
+- File browser with breadcrumbs, search, sorting, list/icon views, and multi-select
+- Create folders, rename, delete, duplicate, Quick Look, favorites
+- Upload and download files **and folders**, with progress, speed, and ETA
+- Name-conflict prompts (Replace / Keep Both / Skip)
+- Resume interrupted uploads and downloads when the server/local partial still exists
+- Retry failed or cancelled transfers
+- Storage quota in the status bar (when the server reports it)
 - Passwords live in the macOS keychain, not in the app itself
 
 ## Building
@@ -67,9 +71,13 @@ ohne Gatekeeper-Warnung.
 ## Funktionen
 
 - Mehrere Storage Boxen mit eigenem Namen, Farbe und Symbol verwalten
-- Dateibrowser mit Breadcrumbs, Sortierung und Mehrfachauswahl
-- Ordner anlegen, umbenennen, löschen
-- Hoch- und Herunterladen einzelner Dateien mit Fortschrittsanzeige, per Drag & Drop oder Dialog
+- Dateibrowser mit Breadcrumbs, Suche, Sortierung, Listen-/Symbolansicht und Mehrfachauswahl
+- Ordner anlegen, umbenennen, löschen, duplizieren, Quick Look, Favoriten
+- Hoch- und Herunterladen von Dateien **und Ordnern**, mit Fortschritt, Geschwindigkeit und ETA
+- Namenskonflikte (Ersetzen / Beide behalten / Überspringen)
+- Fortsetzen unterbrochener Uploads und Downloads, wenn noch eine Teildatei vorhanden ist
+- Fehlgeschlagene oder abgebrochene Transfers erneut starten
+- Speicherkontingent in der Statusleiste (wenn der Server es meldet)
 - Passwörter liegen im macOS-Schlüsselbund, nicht in der App selbst
 
 ## Bauen
