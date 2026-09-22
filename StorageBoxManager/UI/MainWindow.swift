@@ -6,6 +6,40 @@ struct MainWindow: View {
     var body: some View {
         @Bindable var model = model
 
+        layout
+            .sheet(item: $model.boxEditor) { editor in
+                switch editor {
+                case .new:
+                    BoxEditorSheet(box: nil)
+                case .existing(let id):
+                    BoxEditorSheet(box: model.store.boxes.first { $0.id == id })
+                }
+            }
+            .modifier(CompactPresentations())
+            .onChange(of: model.transfers.transfers.count) { oldCount, newCount in
+                if newCount > oldCount, model.transfers.transfers.last?.kind != .preview {
+                    model.showsTransfersInspector = true
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var layout: some View {
+        #if os(macOS)
+        macLayout
+        #else
+        // collapses to a push navigation on iPhone and stays a sidebar on iPad
+        NavigationSplitView {
+            BoxSidebar()
+        } detail: {
+            detailColumn
+        }
+        #endif
+    }
+
+    #if os(macOS)
+    @ViewBuilder
+    private var macLayout: some View {
         HStack(spacing: 0) {
             if model.showsSidebar {
                 NavigationStack {
@@ -28,20 +62,8 @@ struct MainWindow: View {
                     .frame(width: 320)
             }
         }
-        .sheet(item: $model.boxEditor) { editor in
-            switch editor {
-            case .new:
-                BoxEditorSheet(box: nil)
-            case .existing(let id):
-                BoxEditorSheet(box: model.store.boxes.first { $0.id == id })
-            }
-        }
-        .onChange(of: model.transfers.transfers.count) { oldCount, newCount in
-            if newCount > oldCount, model.transfers.transfers.last?.kind != .preview {
-                model.showsTransfersInspector = true
-            }
-        }
     }
+    #endif
 
     @ViewBuilder
     private var detailColumn: some View {
@@ -51,6 +73,33 @@ struct MainWindow: View {
         } else {
             NoBoxSelectedView()
         }
+    }
+}
+
+// On macOS the transfers list is a side panel, settings live in the Settings scene, and Quick Look
+// floats in its own window. None of those exist on iOS, so all three become sheets.
+private struct CompactPresentations: ViewModifier {
+    @Environment(AppModel.self) private var model
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content
+        #else
+        @Bindable var model = model
+
+        content
+            .sheet(isPresented: $model.showsTransfersInspector) {
+                TransfersPanel()
+            }
+            .sheet(isPresented: $model.showsSettings) {
+                NavigationStack {
+                    GeneralSettingsView()
+                }
+            }
+            .sheet(item: $model.previewRequest) { request in
+                QuickLookSheet(request: request)
+            }
+        #endif
     }
 }
 

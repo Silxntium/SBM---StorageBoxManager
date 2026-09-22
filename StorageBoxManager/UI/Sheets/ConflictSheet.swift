@@ -29,6 +29,7 @@ struct ConflictSheet: View {
             }
         }
         .padding(20)
-        .frame(minWidth: 380)
+        .sheetFrame(minWidth: 380, minHeight: 0)
+        .presentationDetents([.medium])
     }
 }

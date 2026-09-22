@@ -24,7 +24,15 @@ struct TransfersPanel: View {
                 }
             }
             .navigationTitle("Transfers")
+            .modifier(TransfersTitleDisplay())
             .toolbar {
+                // a sheet needs its own way out; the macOS side panel has the toolbar toggle
+                #if !os(macOS)
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { model.showsTransfersInspector = false }
+                }
+                #endif
+
                 if model.transfers.hasRetryableTransfers {
                     ToolbarItem(placement: .automatic) {
                         Button("Retry Failed") { model.transfers.retryAllFailed() }
@@ -44,6 +52,16 @@ struct TransfersPanel: View {
                 }
             }
         }
+    }
+}
+
+private struct TransfersTitleDisplay: ViewModifier {
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content
+        #else
+        content.navigationBarTitleDisplayMode(.inline)
+        #endif
     }
 }
 

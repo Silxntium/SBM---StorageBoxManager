@@ -30,15 +30,59 @@ struct FileBrowserChrome: ViewModifier {
                     }
                     .clipped()
             }
+            .modifier(FileBrowserNavigationChrome(box: box, browser: browser, ui: ui, appModel: appModel))
+    }
+}
+
+// The navigation bar is where the two platforms part ways: macOS spreads everything across a wide
+// window toolbar, the iPhone has room for a title and two buttons.
+private struct FileBrowserNavigationChrome: ViewModifier {
+    let box: StorageBox
+    @Bindable var browser: BrowserModel
+    let ui: FileBrowserUI
+    let appModel: AppModel
+
+    private var compactTitle: String {
+        if ui.isSelecting {
+            return browser.selection.isEmpty
+                ? String(localized: "Select Items")
+                : String(localized: "\(browser.selection.count) selected")
+        }
+        return browser.path.isRoot ? box.resolvedName : browser.path.name
+    }
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content
             .navigationTitle(box.resolvedName)
             .navigationSubtitle(browser.path.isRoot ? box.host : browser.path.name)
             .toolbar {
                 FileBrowserToolbar(box: box, browser: browser, appModel: appModel, ui: ui)
             }
+        #else
+        content
+            // the box name is the screen you came from, so the title names the folder instead
+            .navigationTitle(compactTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            // inside a subfolder, back has to mean "up one level" - popping all the way out to
+            // the box list from three folders deep is not what anyone reaches for
+            .navigationBarBackButtonHidden(!browser.path.isRoot)
+            .searchable(text: $browser.searchText, placement: .navigationBarDrawer, prompt: Text("Search"))
+            .searchScopes($browser.searchScope) {
+                ForEach(SearchScope.allCases) { scope in
+                    Text(scope.title).tag(scope)
+                }
+            }
+            .toolbar {
+                FileBrowserCompactToolbar(box: box, browser: browser, appModel: appModel, ui: ui)
+            }
+        #endif
     }
 }
 
-struct FileBrowserToolbar: ToolbarContent {
+#if os(macOS)
+
+private struct FileBrowserToolbar: ToolbarContent {
     let box: StorageBox
     @Bindable var browser: BrowserModel
     let appModel: AppModel
@@ -79,8 +123,7 @@ struct FileBrowserToolbar: ToolbarContent {
             Button("New Folder", systemImage: "folder.badge.plus") { ui.showingNewFolder = true }
                 .help("New Folder (⇧⌘N)")
             Button("Upload", systemImage: "square.and.arrow.up") {
-                let urls = DownloadFolderStore.promptForUploadFiles()
-                if !urls.isEmpty { browser.upload(urls) }
+                beginUpload(browser: browser, ui: ui)
             }
             .help("Upload Files or Folders (⌘U)")
             Button("Download", systemImage: "square.and.arrow.down") {
@@ -116,59 +159,6 @@ struct FileBrowserToolbar: ToolbarContent {
     }
 }
 
-private struct FileBrowserOptionsMenu: View {
-    let box: StorageBox
-    @Bindable var browser: BrowserModel
-    let appModel: AppModel
-
-    var body: some View {
-        Menu {
-            Picker("Search", selection: $browser.searchScope) {
-                ForEach(SearchScope.allCases) { scope in
-                    Text(scope.title).tag(scope)
-                }
-            }
-            Picker("Kind", selection: $browser.kindFilter) {
-                ForEach(KindCategory.allCases) { category in
-                    Label(category.title, systemImage: category.symbolName).tag(category)
-                }
-            }
-            Divider()
-            Picker("Sort By", selection: Binding(
-                get: { browser.sortField },
-                set: { browser.applySort(field: $0, reversed: browser.sortReversed) }
-            )) {
-                ForEach(SortField.allCases) { field in
-                    Text(field.title).tag(field)
-                }
-            }
-            Button(browser.sortReversed ? "Ascending" : "Descending") {
-                browser.applySort(field: browser.sortField, reversed: !browser.sortReversed)
-            }
-            Toggle("Folders on Top", isOn: Binding(
-                get: { browser.foldersFirst },
-                set: { browser.setFoldersFirst($0) }
-            ))
-            Toggle("Relative Dates", isOn: Binding(
-                get: { browser.usesRelativeDates },
-                set: { browser.setRelativeDates($0) }
-            ))
-            Divider()
-            Button(browser.showsHiddenFiles ? "Hide Hidden Files" : "Show Hidden Files") {
-                browser.showsHiddenFiles.toggle()
-            }
-            Button(appModel.favorites.contains(boxID: box.id, path: browser.path) ? "Remove from Favorites" : "Add Folder to Favorites") {
-                let title = browser.path.isRoot ? box.resolvedName : browser.path.name
-                appModel.favorites.toggle(boxID: box.id, path: browser.path, title: title)
-            }
-            Button("Refresh") { browser.refresh() }
-        } label: {
-            Label("View Options", systemImage: "line.3.horizontal.decrease.circle")
-        }
-        .help("Search, sort, and view options")
-    }
-}
-
 private struct FileBrowserSearchField: View {
     @Binding var text: String
     @Binding var isFocused: Bool
@@ -189,6 +179,188 @@ private struct FileBrowserSearchField: View {
                 if !focused { isFocused = false }
             }
             .help("Search this folder")
+    }
+}
+
+#else
+
+// Two menus: one for adding things to the folder, one for everything else. Both stay reachable
+// with one thumb, which the wide macOS toolbar row would not.
+private struct FileBrowserCompactToolbar: ToolbarContent {
+    let box: StorageBox
+    @Bindable var browser: BrowserModel
+    let appModel: AppModel
+    let ui: FileBrowserUI
+
+    private var selectedFileCount: Int {
+        browser.selectedItems.count { !$0.isDirectory }
+    }
+
+    var body: some ToolbarContent {
+        if ui.isSelecting {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Done") {
+                    ui.isSelecting = false
+                    browser.selection = []
+                }
+            }
+
+            ToolbarItemGroup(placement: .bottomBar) {
+                Button("Download", systemImage: "square.and.arrow.down") {
+                    guard let folder = appModel.resolveDownloadFolder() else { return }
+                    browser.download(browser.selectedItems, to: folder)
+                    ui.isSelecting = false
+                    browser.selection = []
+                }
+                .disabled(selectedFileCount == 0)
+
+                Spacer()
+
+                Button("Delete", systemImage: "trash", role: .destructive) {
+                    ui.deleteTargets = browser.selectedItems
+                }
+                .disabled(browser.selection.isEmpty)
+            }
+        } else {
+            if !browser.path.isRoot {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Enclosing Folder", systemImage: "chevron.left") { browser.goUp() }
+                }
+            }
+
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button("New Folder…", systemImage: "folder.badge.plus") { ui.showingNewFolder = true }
+                    Divider()
+                    Button("Upload Files…", systemImage: "doc") {
+                        beginUpload(browser: browser, ui: ui, kind: .files)
+                    }
+                    Button("Upload Folder…", systemImage: "folder") {
+                        beginUpload(browser: browser, ui: ui, kind: .folder)
+                    }
+                } label: {
+                    Label("Add", systemImage: "plus")
+                }
+            }
+
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button("Select…", systemImage: "checkmark.circle") { ui.isSelecting = true }
+
+                    Picker("View", selection: Binding(
+                        get: { browser.listingLayout },
+                        set: { browser.setLayout($0) }
+                    )) {
+                        ForEach(ListingLayout.allCases) { layout in
+                            Label(layout.title, systemImage: layout.symbolName).tag(layout)
+                        }
+                    }
+                    .pickerStyle(.inline)
+
+                    Divider()
+
+                    FileBrowserOptionsMenu(box: box, browser: browser, appModel: appModel)
+
+                    Divider()
+
+                    Button("Go to Folder…", systemImage: "arrow.turn.down.right") {
+                        ui.showingGoToFolder = true
+                    }
+                    Button(
+                        appModel.transfers.activeCount > 0
+                            ? "Transfers (\(appModel.transfers.activeCount))"
+                            : "Transfers",
+                        systemImage: "list.bullet.rectangle"
+                    ) {
+                        appModel.showsTransfersInspector = true
+                    }
+                    Button("Settings…", systemImage: "gear") { appModel.showsSettings = true }
+                } label: {
+                    Label("More", systemImage: "ellipsis.circle")
+                }
+            }
+        }
+    }
+}
+
+#endif
+
+// Shared between the macOS toolbar popover and the iOS "more" menu.
+private struct FileBrowserOptionsMenu: View {
+    let box: StorageBox
+    @Bindable var browser: BrowserModel
+    let appModel: AppModel
+
+    var body: some View {
+        #if os(macOS)
+        Menu {
+            options
+        } label: {
+            Label("View Options", systemImage: "line.3.horizontal.decrease.circle")
+        }
+        .help("Search, sort, and view options")
+        #else
+        options
+        #endif
+    }
+
+    @ViewBuilder
+    private var options: some View {
+        #if os(macOS)
+        Picker("Search", selection: $browser.searchScope) {
+            ForEach(SearchScope.allCases) { scope in
+                Text(scope.title).tag(scope)
+            }
+        }
+        #endif
+        Picker("Kind", selection: $browser.kindFilter) {
+            ForEach(KindCategory.allCases) { category in
+                Label(category.title, systemImage: category.symbolName).tag(category)
+            }
+        }
+        .modifier(SubmenuPickerStyle())
+        Divider()
+        Picker("Sort By", selection: Binding(
+            get: { browser.sortField },
+            set: { browser.applySort(field: $0, reversed: browser.sortReversed) }
+        )) {
+            ForEach(SortField.allCases) { field in
+                Text(field.title).tag(field)
+            }
+        }
+        .modifier(SubmenuPickerStyle())
+        Button(browser.sortReversed ? "Ascending" : "Descending") {
+            browser.applySort(field: browser.sortField, reversed: !browser.sortReversed)
+        }
+        Toggle("Folders on Top", isOn: Binding(
+            get: { browser.foldersFirst },
+            set: { browser.setFoldersFirst($0) }
+        ))
+        Toggle("Relative Dates", isOn: Binding(
+            get: { browser.usesRelativeDates },
+            set: { browser.setRelativeDates($0) }
+        ))
+        Divider()
+        Button(browser.showsHiddenFiles ? "Hide Hidden Files" : "Show Hidden Files") {
+            browser.showsHiddenFiles.toggle()
+        }
+        Button(appModel.favorites.contains(boxID: box.id, path: browser.path) ? "Remove from Favorites" : "Add Folder to Favorites") {
+            let title = browser.path.isRoot ? box.resolvedName : browser.path.name
+            appModel.favorites.toggle(boxID: box.id, path: browser.path, title: title)
+        }
+        Button("Refresh") { browser.refresh() }
+    }
+}
+
+// Inside an iOS menu a plain Picker flattens into the menu; .menu style folds it into a
+// submenu row instead, which keeps the whole thing to one screen.
+private struct SubmenuPickerStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content
+        #else
+        content.pickerStyle(.menu)
+        #endif
     }
 }
 
@@ -246,7 +418,7 @@ private struct PathBar: View {
                                 .fontWeight(crumb == path ? .semibold : .regular)
                         }
                     }
-                    .buttonStyle(.accessoryBar)
+                    .modifier(PathCrumbStyle())
                     .disabled(crumb == path)
                     .help(crumb.displayPath)
                 }
@@ -259,6 +431,19 @@ private struct PathBar: View {
         .frame(height: 30)
         .background(.bar)
         .overlay(alignment: .top) { Divider() }
+    }
+}
+
+private struct PathCrumbStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content.buttonStyle(.accessoryBar)
+        #else
+        content
+            .buttonStyle(.plain)
+            .font(.subheadline)
+            .foregroundStyle(Color.accentColor)
+        #endif
     }
 }
 

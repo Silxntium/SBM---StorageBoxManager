@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct GetInfoSheet: View {
@@ -25,7 +24,7 @@ struct GetInfoSheet: View {
                 }
             }
         }
-        .frame(minWidth: 360, idealWidth: 400, minHeight: 320)
+        .sheetFrame(minWidth: 360, idealWidth: 400, minHeight: 320)
     }
 
     @ViewBuilder
@@ -42,10 +41,7 @@ struct GetInfoSheet: View {
             Text(item.path.displayPath)
                 .textSelection(.enabled)
                 .font(.body.monospaced())
-            Button("Copy Path") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(item.path.displayPath, forType: .string)
-            }
+            Button("Copy Path") { copyToPasteboard(item.path.displayPath) }
         }
 
         if let type = item.contentType, !type.isEmpty {
@@ -103,7 +99,7 @@ struct GoToFolderSheet: View {
                 }
             }
         }
-        .frame(width: 420, height: 190)
+        .sheetFrame(width: 420, height: 190)
         .onAppear {
             text = currentPath
             fieldFocused = true

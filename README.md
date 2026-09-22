@@ -2,8 +2,9 @@
 
 *[Deutsch weiter unten](#storage-boxes-deutsch)*
 
-A small macOS app for managing multiple storage boxes with custom names and browsing their
-files through a proper interface instead of the Finder.
+A small app for managing multiple storage boxes with custom names and browsing their files
+through a proper interface instead of the Finder. Runs on macOS, iPhone, and iPad from one
+codebase — same boxes, same WebDAV backend, a layout that fits each screen.
 
 ## Why
 
@@ -18,9 +19,11 @@ because anything is hardcoded to it.
 
 ## Installation
 
-Download the latest `StorageBoxManager.zip` from [Releases](../../releases), unzip it, and drag
-the `.app` into your Applications folder. The app is signed and notarized — no Gatekeeper
-warning on launch.
+**macOS** — download the latest `StorageBoxManager.zip` from [Releases](../../releases), unzip
+it, and drag the `.app` into your Applications folder. The app is signed and notarized — no
+Gatekeeper warning on launch.
+
+**iPhone / iPad** — ships through TestFlight from the same target and bundle identifier.
 
 ## Features
 
@@ -32,14 +35,29 @@ warning on launch.
 - Resume interrupted uploads and downloads when the server/local partial still exists
 - Retry failed or cancelled transfers
 - Storage quota in the status bar (when the server reports it)
-- Passwords live in the macOS keychain, not in the app itself
+- Passwords live in the keychain, not in the app itself
+
+### On iPhone and iPad
+
+The browser is one screen per box: tap a box to open it, back goes up a folder, and the
+breadcrumb bar at the bottom jumps anywhere along the path. The macOS table becomes a two-line
+list, multi-select lives behind "Select", and swiping a row gets at download, delete, and
+rename. Uploads come from the document picker; downloads land in the app's own folder, which
+shows up in Files under "On My iPhone › Storage Boxes".
+
+One thing to know: transfers only run while the app is on screen. Switching away gives them a
+few seconds of grace, enough for small files, but a large upload needs the app left open.
 
 ## Building
 
-Requires Xcode 16+.
+Requires Xcode 16+. One target builds both platforms — macOS 15+ and iOS 18+.
 
 ```bash
-xcodebuild -project StorageBoxManager.xcodeproj -scheme StorageBoxManager -configuration Debug build
+xcodebuild -project StorageBoxManager.xcodeproj -scheme StorageBoxManager -destination 'platform=macOS' build
+```
+
+```bash
+xcodebuild -project StorageBoxManager.xcodeproj -scheme StorageBoxManager -destination 'generic/platform=iOS' build
 ```
 
 ---
@@ -48,8 +66,10 @@ xcodebuild -project StorageBoxManager.xcodeproj -scheme StorageBoxManager -confi
 
 # Storage Boxes (Deutsch)
 
-Eine kleine macOS-App, um mehrere Storage Boxen mit selbst gewählten Namen zu verwalten und
-ihre Dateien über eine eigene Oberfläche zu durchsuchen, statt über den Finder.
+Eine kleine App, um mehrere Storage Boxen mit selbst gewählten Namen zu verwalten und ihre
+Dateien über eine eigene Oberfläche zu durchsuchen, statt über den Finder. Läuft aus einer
+Codebasis auf macOS, iPhone und iPad — dieselben Boxen, dasselbe WebDAV-Backend, ein Layout,
+das zum jeweiligen Bildschirm passt.
 
 ## Warum
 
@@ -64,9 +84,11 @@ weil das der ursprüngliche Anlass war — fest verdrahtet ist nichts davon.
 
 ## Installation
 
-Unter [Releases](../../releases) die neueste `StorageBoxManager.zip` herunterladen, entpacken
-und die `.app` in den Programme-Ordner ziehen. Die App ist signiert und notarisiert — startet
-ohne Gatekeeper-Warnung.
+**macOS** — unter [Releases](../../releases) die neueste `StorageBoxManager.zip` herunterladen,
+entpacken und die `.app` in den Programme-Ordner ziehen. Die App ist signiert und notarisiert —
+startet ohne Gatekeeper-Warnung.
+
+**iPhone / iPad** — kommt über TestFlight, aus demselben Target und mit derselben Bundle-ID.
 
 ## Funktionen
 
@@ -78,12 +100,28 @@ ohne Gatekeeper-Warnung.
 - Fortsetzen unterbrochener Uploads und Downloads, wenn noch eine Teildatei vorhanden ist
 - Fehlgeschlagene oder abgebrochene Transfers erneut starten
 - Speicherkontingent in der Statusleiste (wenn der Server es meldet)
-- Passwörter liegen im macOS-Schlüsselbund, nicht in der App selbst
+- Passwörter liegen im Schlüsselbund, nicht in der App selbst
+
+### Auf iPhone und iPad
+
+Der Browser ist ein Bildschirm pro Box: Box antippen zum Öffnen, Zurück geht einen Ordner hoch,
+und die Breadcrumb-Leiste unten springt an jede Stelle des Pfads. Aus der macOS-Tabelle wird
+eine zweizeilige Liste, Mehrfachauswahl steckt hinter „Select", und ein Wisch über eine Zeile
+gibt Download, Löschen und Umbenennen frei. Uploads kommen aus der Dateien-Auswahl, Downloads
+landen im App-eigenen Ordner, der in „Dateien" unter „Auf meinem iPhone › Storage Boxes"
+auftaucht.
+
+Eine Einschränkung: Transfers laufen nur, solange die App sichtbar ist. Beim Wegwischen bleiben
+ein paar Sekunden Puffer — genug für kleine Dateien, ein großer Upload braucht die App offen.
 
 ## Bauen
 
-Xcode 16+ nötig.
+Xcode 16+ nötig. Ein Target baut beide Plattformen — macOS 15+ und iOS 18+.
 
 ```bash
-xcodebuild -project StorageBoxManager.xcodeproj -scheme StorageBoxManager -configuration Debug build
+xcodebuild -project StorageBoxManager.xcodeproj -scheme StorageBoxManager -destination 'platform=macOS' build
+```
+
+```bash
+xcodebuild -project StorageBoxManager.xcodeproj -scheme StorageBoxManager -destination 'generic/platform=iOS' build
 ```

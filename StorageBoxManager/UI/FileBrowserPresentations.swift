@@ -1,5 +1,5 @@
-import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct FileBrowserPresentations: ViewModifier {
     let box: StorageBox
@@ -11,13 +11,14 @@ struct FileBrowserPresentations: ViewModifier {
     func body(content: Content) -> some View {
         content
             .focusedSceneValue(\.browserActions, FileBrowserActions.commands(box: box, browser: browser, ui: ui, appModel: appModel))
-            .onDeleteCommand {
+            .onDeleteKey {
                 if !browser.selectedItems.isEmpty { ui.deleteTargets = browser.selectedItems }
             }
-            .onCopyCommand {
+            .onCopyKey {
                 copyToPasteboard(browser.selectedItems.map(\.name).joined(separator: "\n"))
-                return []
             }
+            .modifier(UploadPicker(browser: browser, ui: ui))
+            .onChange(of: browser.path) { _, _ in ui.isSelecting = false }
             .onChange(of: browser.searchText) { _, _ in browser.scheduleSearch() }
             .onChange(of: browser.searchScope) { _, _ in browser.scheduleSearch() }
             .onChange(of: browser.kindFilter) { _, _ in browser.scheduleSearch() }
@@ -104,6 +105,46 @@ struct FileBrowserPresentations: ViewModifier {
     }
 }
 
+// macOS can ask for files and folders in one open panel and gets the URLs back right away.
+// iOS has to present a document picker, so the request becomes state the view reacts to.
+@MainActor
+func beginUpload(browser: BrowserModel, ui: FileBrowserUI, kind: UploadPickerKind = .files) {
+    #if os(macOS)
+    let urls = DownloadFolderStore.promptForUploadFiles()
+    if !urls.isEmpty { browser.upload(urls) }
+    #else
+    ui.uploadPicker = kind
+    #endif
+}
+
+private struct UploadPicker: ViewModifier {
+    let browser: BrowserModel
+    @Bindable var ui: FileBrowserUI
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content
+        #else
+        content.fileImporter(
+            isPresented: Binding(get: { ui.uploadPicker != nil }, set: { if !$0 { ui.uploadPicker = nil } }),
+            allowedContentTypes: ui.uploadPicker == .folder ? [.folder] : [.item],
+            allowsMultipleSelection: true
+        ) { result in
+            ui.uploadPicker = nil
+            switch result {
+            case .success(let urls):
+                if !urls.isEmpty { browser.upload(urls) }
+            case .failure(let error):
+                browser.alert = BrowserModel.AlertMessage(
+                    title: String(localized: "Couldn't Open Files"),
+                    message: error.localizedDescription
+                )
+            }
+        }
+        #endif
+    }
+}
+
 enum FileBrowserActions {
     @MainActor
     static func itemActions(box: StorageBox, browser: BrowserModel, ui: FileBrowserUI, appModel: AppModel) -> FileItemActions {
@@ -120,10 +161,7 @@ enum FileBrowserActions {
             toggleFavorite: { appModel.favorites.toggle(boxID: box.id, path: $0.path, title: $0.name) },
             isFavorite: { appModel.favorites.contains(boxID: box.id, path: $0.path) },
             newFolder: { ui.showingNewFolder = true },
-            upload: {
-                let urls = DownloadFolderStore.promptForUploadFiles()
-                if !urls.isEmpty { browser.upload(urls) }
-            },
+            upload: { beginUpload(browser: browser, ui: ui) },
             refresh: { browser.refresh() },
             copyName: { copyToPasteboard($0.name) },
             copyPath: { copyToPasteboard($0.path.displayPath) },
@@ -142,10 +180,7 @@ enum FileBrowserActions {
             canGoForward: browser.canGoForward,
             goToFolder: { ui.showingGoToFolder = true },
             newFolder: { ui.showingNewFolder = true },
-            upload: {
-                let urls = DownloadFolderStore.promptForUploadFiles()
-                if !urls.isEmpty { browser.upload(urls) }
-            },
+            upload: { beginUpload(browser: browser, ui: ui) },
             download: { download(appModel, browser, browser.selectedItems) },
             downloadAndOpen: { download(appModel, browser, browser.selectedItems, open: true) },
             canDownload: browser.selectedItems.contains { !$0.isDirectory },
@@ -183,9 +218,4 @@ enum FileBrowserActions {
         guard let folder = appModel.resolveDownloadFolder() else { return }
         browser.download(targets, to: folder, openWhenDone: open)
     }
-}
-
-func copyToPasteboard(_ string: String) {
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(string, forType: .string)
 }

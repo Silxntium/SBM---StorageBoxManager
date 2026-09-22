@@ -122,7 +122,7 @@ struct BoxEditorSheet: View {
                 }
             }
         }
-        .frame(minWidth: 460, idealWidth: 500, minHeight: 520)
+        .sheetFrame(minWidth: 460, idealWidth: 500, minHeight: 520)
         .onAppear {
             loadExisting()
             focusedField = isEditing ? .name : .host

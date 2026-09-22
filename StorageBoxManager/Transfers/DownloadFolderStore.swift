@@ -1,9 +1,17 @@
-import AppKit
 import Foundation
 
-// a plain path string is useless after relaunch in the sandbox - need the security-scoped
-// bookmark to actually keep write access
+#if os(macOS)
+import AppKit
+#endif
+
+// macOS: a plain path string is useless after relaunch in the sandbox - need the security-scoped
+// bookmark to actually keep write access, and the folder is wherever the user picked.
+// iOS: apps own a Documents folder and nothing else, so that's the destination. No picker, no
+// bookmark - with UIFileSharingEnabled it shows up in Files under "Storage Boxes".
 enum DownloadFolderStore {
+
+    #if os(macOS)
+
     private static let defaultsKey = "downloadFolderBookmark"
 
     static func save(_ url: URL) throws {
@@ -68,6 +76,19 @@ enum DownloadFolderStore {
         guard panel.runModal() == .OK else { return [] }
         return panel.urls
     }
+
+    #else
+
+    /// The app's own Documents folder. Downloads land here and stay reachable from the Files app.
+    static func resolve() -> URL? {
+        guard let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    #endif
 
     // "file.txt" -> "file 2.txt" -> "file 3.txt" etc, same as Finder does it
     static func uniqueDestination(for name: String, in folder: URL) -> URL {
