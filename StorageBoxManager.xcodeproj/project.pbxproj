@@ -193,7 +193,7 @@
 				CODE_SIGN_STYLE = Manual;
 				"CODE_SIGN_STYLE[sdk=iphoneos*]" = Automatic;
 				"COMBINE_HIDPI_IMAGES[sdk=macosx*]" = YES;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = 98CMJ27T5J;
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = 98CMJ27T5J;
@@ -233,7 +233,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = StorageBoxManager/StorageBoxManager.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				"COMBINE_HIDPI_IMAGES[sdk=macosx*]" = YES;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = 98CMJ27T5J;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
 				ENABLE_PREVIEWS = YES;
