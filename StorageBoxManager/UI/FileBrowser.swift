@@ -50,4 +50,17 @@ final class FileBrowserUI {
     var deleteTargets: [RemoteItem] = []
     var isDropTargeted = false
     var searchFocused = false
+    // iOS only - macOS runs the open panel inline instead of going through a presentation
+    var uploadPicker: UploadPickerKind?
+    // iOS only - the list needs an explicit selection mode, macOS selects with the mouse
+    var isSelecting = false
+}
+
+// The iOS document picker can browse into folders or select them, not both, so uploading a
+// folder is its own menu item there. macOS's open panel does both at once and ignores this.
+enum UploadPickerKind: Identifiable, Hashable {
+    case files
+    case folder
+
+    var id: Self { self }
 }

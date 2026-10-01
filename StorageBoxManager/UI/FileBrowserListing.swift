@@ -21,19 +21,19 @@ struct FileBrowserListing: View {
 
             if showsSkeleton {
                 FolderSkeletonView()
-                    .background(Color(nsColor: .windowBackgroundColor))
+                    .background(Color.platformWindowBackground)
             } else if let message = failureMessage {
                 FileBrowserFailureView(message: message, onRoot: { browser.navigate(to: .root) }, onRetry: { browser.refresh() })
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(nsColor: .windowBackgroundColor))
+                    .background(Color.platformWindowBackground)
             } else if showsSearchEmpty {
                 ContentUnavailableView.search(text: emptySearchText)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(nsColor: .windowBackgroundColor))
+                    .background(Color.platformWindowBackground)
             } else if showsEmptyFolder {
                 FileBrowserEmptyFolder(browser: browser, ui: ui)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(nsColor: .windowBackgroundColor))
+                    .background(Color.platformWindowBackground)
             }
         }
     }
@@ -43,7 +43,7 @@ struct FileBrowserListing: View {
         if browser.listingLayout == .icons {
             iconGrid
         } else {
-            fileTable
+            rows
         }
     }
 
@@ -96,6 +96,7 @@ struct FileBrowserListing: View {
             box: box,
             query: browser.searchText,
             relativeDates: browser.usesRelativeDates,
+            isSelecting: ui.isSelecting,
             selection: $browser.selection,
             backend: browser.storageBackend,
             onOpen: { browser.open($0) },
@@ -103,7 +104,9 @@ struct FileBrowserListing: View {
         )
     }
 
-    private var fileTable: some View {
+    @ViewBuilder
+    private var rows: some View {
+        #if os(macOS)
         FileTableView(
             items: browser.displayedItems,
             box: box,
@@ -116,6 +119,19 @@ struct FileBrowserListing: View {
             canQuickLook: browser.canQuickLook,
             actions: FileBrowserActions.itemActions(box: box, browser: browser, ui: ui, appModel: appModel)
         )
+        #else
+        FileCompactList(
+            items: browser.displayedItems,
+            box: box,
+            query: browser.searchText,
+            relativeDates: browser.usesRelativeDates,
+            showLocation: browser.isDeepSearchActive,
+            isSelecting: ui.isSelecting,
+            selection: $browser.selection,
+            backend: browser.storageBackend,
+            actions: FileBrowserActions.itemActions(box: box, browser: browser, ui: ui, appModel: appModel)
+        )
+        #endif
     }
 }
 
@@ -172,18 +188,31 @@ private struct FileBrowserEmptyFolder: View {
         } description: {
             Text(
                 browser.hiddenItemCount > 0
-                    ? "\(browser.hiddenItemCount) hidden items. Show them with ⌘⇧."
-                    : "Drag files or folders here to upload them, or use Upload in the toolbar."
+                    ? hiddenItemsHint
+                    : uploadHint
             )
         } actions: {
             if browser.hiddenItemCount > 0 {
                 Button("Show Hidden Files") { browser.showsHiddenFiles = true }
             }
-            Button("Upload…") {
-                let urls = DownloadFolderStore.promptForUploadFiles()
-                if !urls.isEmpty { browser.upload(urls) }
-            }
+            Button("Upload…") { beginUpload(browser: browser, ui: ui) }
             Button("New Folder") { ui.showingNewFolder = true }
         }
+    }
+
+    private var hiddenItemsHint: String {
+        #if os(macOS)
+        String(localized: "\(browser.hiddenItemCount) hidden items. Show them with ⌘⇧.")
+        #else
+        String(localized: "\(browser.hiddenItemCount) hidden items. Show them from the More menu.")
+        #endif
+    }
+
+    private var uploadHint: String {
+        #if os(macOS)
+        String(localized: "Drag files or folders here to upload them, or use Upload in the toolbar.")
+        #else
+        String(localized: "Upload files or folders with the + button above.")
+        #endif
     }
 }

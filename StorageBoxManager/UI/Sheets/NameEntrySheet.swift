@@ -54,7 +54,7 @@ struct NameEntrySheet: View { // shared by "new folder" and "rename", just a nam
                 }
             }
         }
-        .frame(width: 380, height: 190)
+        .sheetFrame(width: 380, height: 190)
         .onAppear {
             text = initialText
             fieldFocused = true

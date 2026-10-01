@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Merged into the keys generated from the INFOPLIST_KEY_* build settings. These two live here
+	  because Xcode has no build setting for UIFileSharingEnabled and drops it silently; keeping
+	  its partner next to it beats splitting the pair across two places.
+
+	  Together they expose the app's Documents folder - where downloads land - in the Files app.
+	-->
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+</dict>
+</plist>

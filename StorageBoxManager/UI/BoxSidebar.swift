@@ -26,6 +26,25 @@ struct BoxSidebar: View {
                 }
                 .help("Add a storage box")
             }
+
+            // the box list is the first screen on iPhone, so the app-level extras live here too
+            #if !os(macOS)
+            ToolbarItem(placement: .topBarLeading) {
+                Menu {
+                    Button(
+                        model.transfers.activeCount > 0
+                            ? "Transfers (\(model.transfers.activeCount))"
+                            : "Transfers",
+                        systemImage: "list.bullet.rectangle"
+                    ) {
+                        model.showsTransfersInspector = true
+                    }
+                    Button("Settings…", systemImage: "gear") { model.showsSettings = true }
+                } label: {
+                    Label("More", systemImage: "ellipsis.circle")
+                }
+            }
+            #endif
         }
         .confirmationDialog(
             "Remove \"\(boxPendingRemoval?.resolvedName ?? "")\"?",
@@ -36,20 +55,26 @@ struct BoxSidebar: View {
             titleVisibility: .visible
         ) {
             Button("Remove", role: .destructive) {
-                if let box = boxPendingRemoval {
-                    if model.selectedBoxID == box.id { model.selectedBoxID = nil }
-                    model.store.remove(box)
-                    model.favorites.prune(validBoxIDs: Set(model.store.boxes.map(\.id)))
-                    if model.selectedBoxID == nil {
-                        model.selectedBoxID = model.store.boxes.first?.id
-                    }
-                }
+                if let box = boxPendingRemoval { remove(box) }
                 boxPendingRemoval = nil
             }
             Button("Cancel", role: .cancel) { boxPendingRemoval = nil }
         } message: {
             Text("This only removes the box from this app. Nothing is deleted on the server.")
         }
+    }
+
+    private func remove(_ box: StorageBox) {
+        if model.selectedBoxID == box.id { model.selectedBoxID = nil }
+        model.store.remove(box)
+        model.favorites.prune(validBoxIDs: Set(model.store.boxes.map(\.id)))
+        // on iPhone a selection pushes a screen, so falling through to the next box would
+        // yank the user straight back into a browser they didn't ask for
+        #if os(macOS)
+        if model.selectedBoxID == nil {
+            model.selectedBoxID = model.store.boxes.first?.id
+        }
+        #endif
     }
 
     private var emptyState: some View {
@@ -95,7 +120,7 @@ struct BoxSidebar: View {
                 Button("Remove…", role: .destructive) { boxPendingRemoval = box }
             }
         }
-        .onDeleteCommand {
+        .onDeleteKey {
             if let box = model.selectedBox {
                 boxPendingRemoval = box
             }
@@ -112,7 +137,7 @@ struct BoxSidebar: View {
                     .textFieldStyle(.plain)
                     .focused($renameFieldFocused)
                     .onSubmit { commitRename(for: box) }
-                    .onExitCommand { renamingID = nil }
+                    .onEscapeKey { renamingID = nil }
                     // clicking away also commits (not just enter) - don't want to silently lose the edit
                     .onChange(of: renameFieldFocused) { _, focused in
                         if !focused, renamingID == box.id { commitRename(for: box) }
@@ -138,6 +163,11 @@ struct BoxSidebar: View {
             Divider()
             Button("Remove…", role: .destructive) { boxPendingRemoval = box }
         }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button("Remove", systemImage: "trash", role: .destructive) { boxPendingRemoval = box }
+            Button("Edit", systemImage: "pencil") { model.boxEditor = .existing(box.id) }
+                .tint(.orange)
+        }
     }
 
     private func favoriteRow(_ favorite: FolderFavorite) -> some View {
@@ -158,11 +188,18 @@ struct BoxSidebar: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
+                Spacer(minLength: 0)
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .contextMenu {
             Button("Remove from Favorites", role: .destructive) {
+                model.favorites.remove(favorite)
+            }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button("Remove", systemImage: "star.slash", role: .destructive) {
                 model.favorites.remove(favorite)
             }
         }

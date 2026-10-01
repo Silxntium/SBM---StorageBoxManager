@@ -9,6 +9,7 @@ final class TransferQueue {
     private let maxConcurrent = 3 // more than this and the box starts refusing connections on a big batch
     private var running: [Transfer.ID: Task<Void, Never>] = [:]
     private var jobs: [Transfer.ID: Job] = [:]
+    private let activity = TransferActivity() // keeps iOS from suspending us mid-transfer
 
     private struct Job {
         let transfer: Transfer
@@ -106,6 +107,7 @@ final class TransferQueue {
               let job = jobs[next.id] {
             start(job)
         }
+        activity.update(isBusy: activeCount > 0)
     }
 
     private func start(_ job: Job) {
@@ -167,6 +169,7 @@ final class TransferQueue {
             task.cancel()
         } else if let transfer = transfers.first(where: { $0.id == id }), transfer.state == .waiting {
             transfer.state = .cancelled
+            pump()
         }
     }
 

@@ -113,11 +113,13 @@ struct AppCommands: Commands {
             .keyboardShortcut("i", modifiers: [.command, .option])
             .disabled(model == nil)
 
+            #if os(macOS)
             Button(model?.showsSidebar == true ? "Hide Sidebar" : "Show Sidebar") {
                 model?.showsSidebar.toggle()
             }
             .keyboardShortcut("s", modifiers: [.command, .control])
             .disabled(model == nil)
+            #endif
         }
 
         CommandMenu("Go") {

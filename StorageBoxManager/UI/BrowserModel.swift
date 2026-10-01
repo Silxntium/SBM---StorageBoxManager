@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import Observation
 
@@ -43,6 +42,7 @@ final class BrowserModel {
     private static let sortReversedKey = "sortReversed"
 
     private let backend: (any StorageBackend)?
+    private let appModel: AppModel // Quick Look and "open" go through the app, not AppKit
     private let setupFailure: String?
     private let queue: TransferQueue
     private var cache: [RemotePath: [RemoteItem]] = [:] // per-session, so going back up a level is instant
@@ -69,6 +69,7 @@ final class BrowserModel {
 
     init(box: StorageBox, model: AppModel, initialPath: RemotePath? = nil) {
         self.box = box
+        appModel = model
         queue = model.transfers
         showsHiddenFiles = UserDefaults.standard.bool(forKey: Self.hiddenFilesKey)
         foldersFirst = UserDefaults.standard.object(forKey: Self.foldersFirstKey) as? Bool ?? true
@@ -613,9 +614,9 @@ final class BrowserModel {
                     boxName: box.resolvedName,
                     displayName: file.displayName,
                     securityScopedRoot: folder,
-                    onSuccess: {
+                    onSuccess: { [appModel] in
                         if openWhenDone {
-                            NSWorkspace.shared.open(file.destination)
+                            appModel.openDownloaded(url: file.destination, title: file.displayName)
                         }
                     }
                 )
@@ -642,8 +643,8 @@ final class BrowserModel {
             boxName: box.resolvedName,
             securityScopedRoot: nil,
             kind: .preview,
-            onSuccess: {
-                QuickLookPreview.present(url: destination, title: item.name)
+            onSuccess: { [appModel] in
+                appModel.presentPreview(url: destination, title: item.name)
             }
         )
     }

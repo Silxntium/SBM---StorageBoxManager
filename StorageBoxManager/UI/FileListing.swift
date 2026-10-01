@@ -1,9 +1,16 @@
-import AppKit
 import SwiftUI
+
+#if os(macOS)
+import AppKit
+
+// the grid reads ⇧/⌘ at click time; there is no touchscreen equivalent
+private var modifierFlags: NSEvent.ModifierFlags { NSEvent.modifierFlags }
+#endif
 
 struct FolderSkeletonView: View {
     var body: some View {
         VStack(spacing: 0) {
+            #if os(macOS)
             HStack {
                 Text("Name")
                 Spacer()
@@ -17,6 +24,7 @@ struct FolderSkeletonView: View {
             .padding(.vertical, 7)
 
             Divider()
+            #endif
 
             ForEach(0..<10, id: \.self) { index in
                 HStack(spacing: 10) {
@@ -27,12 +35,14 @@ struct FolderSkeletonView: View {
                         .fill(.quaternary)
                         .frame(width: barWidth(for: index), height: 10)
                     Spacer()
+                    #if os(macOS)
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
                         .fill(.quaternary)
                         .frame(width: 48, height: 8)
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
                         .fill(.quaternary)
                         .frame(width: 96, height: 8)
+                    #endif
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
                         .fill(.quaternary)
                         .frame(width: 64, height: 8)
@@ -68,14 +78,17 @@ struct BrowserStatusBar: View {
                 .opacity(isBusy ? 1 : 0)
             Text(summary)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
             Spacer()
             if hiddenItemCount > 0 {
                 Text("\(hiddenItemCount) hidden")
                     .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
             if let quotaSummary {
                 Text(quotaSummary)
                     .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
         }
         .font(.caption)
@@ -92,6 +105,7 @@ struct FileIconGrid: View {
     let box: StorageBox
     let query: String
     let relativeDates: Bool
+    let isSelecting: Bool
     @Binding var selection: Set<RemoteItem.ID>
     let backend: (any StorageBackend)?
     let onOpen: (RemoteItem) -> Void
@@ -108,7 +122,7 @@ struct FileIconGrid: View {
             }
             .padding(20)
         }
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(Color.platformContentBackground)
         .onKeyPress(.space) {
             if let file = items.first(where: { selection.contains($0.id) && !$0.isDirectory }) {
                 onPreview(file)
@@ -136,9 +150,16 @@ struct FileIconGrid: View {
         .padding(.horizontal, 6)
         .frame(width: 104, height: 96)
         .background(isSelected ? Color.accentColor.opacity(0.18) : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(alignment: .topTrailing) {
+            if isSelecting {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                    .padding(4)
+            }
+        }
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .onTapGesture(count: 2) { onOpen(item) }
-        .onTapGesture { select(item) }
+        .modifier(IconTapBehavior(item: item, isSelecting: isSelecting, onOpen: onOpen, onSelect: select))
         .contextMenu {
             if item.isDirectory {
                 Button("Open") { onOpen(item) }
@@ -154,20 +175,57 @@ struct FileIconGrid: View {
     }
 
     private func select(_ item: RemoteItem) {
-        if NSEvent.modifierFlags.contains(.shift), let anchor = selection.first,
+        #if os(macOS)
+        if modifierFlags.contains(.shift), let anchor = selection.first,
            let from = items.firstIndex(where: { $0.id == anchor }),
            let to = items.firstIndex(where: { $0.id == item.id }) {
             let range = items[min(from, to)...max(from, to)]
             selection = Set(range.map(\.id))
-        } else if NSEvent.modifierFlags.contains(.command) {
-            if selection.contains(item.id) {
-                selection.remove(item.id)
-            } else {
-                selection.insert(item.id)
-            }
+        } else if modifierFlags.contains(.command) {
+            toggle(item)
         } else {
             selection = [item.id]
         }
+        #else
+        // no modifier keys to read on a touchscreen - selection mode decides instead
+        if isSelecting {
+            toggle(item)
+        } else {
+            selection = [item.id]
+        }
+        #endif
+    }
+
+    private func toggle(_ item: RemoteItem) {
+        if selection.contains(item.id) {
+            selection.remove(item.id)
+        } else {
+            selection.insert(item.id)
+        }
+    }
+}
+
+// macOS: double-click opens, single click selects. iOS: one tap does whichever the mode calls for.
+private struct IconTapBehavior: ViewModifier {
+    let item: RemoteItem
+    let isSelecting: Bool
+    let onOpen: (RemoteItem) -> Void
+    let onSelect: (RemoteItem) -> Void
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content
+            .onTapGesture(count: 2) { onOpen(item) }
+            .onTapGesture { onSelect(item) }
+        #else
+        content.onTapGesture {
+            if isSelecting {
+                onSelect(item)
+            } else {
+                onOpen(item)
+            }
+        }
+        #endif
     }
 }
 
@@ -190,6 +248,8 @@ struct FileItemActions {
     var copyPath: (RemoteItem) -> Void = { _ in }
     var isDeepSearch = false
 }
+
+#if os(macOS)
 
 struct FileTableView: View {
     let items: [RemoteItem]
@@ -279,6 +339,117 @@ private struct FileNameCell: View {
         .accessibilityValue(item.isDirectory ? "Folder" : item.kindDescription)
     }
 }
+
+#else
+
+// A five-column table is unreadable on a phone, so the columns collapse into a two-line row and
+// the actions that were toolbar buttons on macOS become swipes.
+struct FileCompactList: View {
+    let items: [RemoteItem]
+    let box: StorageBox
+    let query: String
+    let relativeDates: Bool
+    let showLocation: Bool
+    let isSelecting: Bool
+    @Binding var selection: Set<RemoteItem.ID>
+    let backend: (any StorageBackend)?
+    let actions: FileItemActions
+
+    var body: some View {
+        List(items, selection: $selection) { item in
+            row(for: item)
+        }
+        .listStyle(.plain)
+        .environment(\.editMode, .constant(isSelecting ? .active : .inactive))
+        .refreshable { actions.refresh() }
+    }
+
+    private func row(for item: RemoteItem) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: item.symbolName)
+                .symbolRenderingMode(.hierarchical)
+                .font(.title3)
+                .foregroundStyle(item.isDirectory ? box.tint.color : Color.secondary)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.highlightedName(matching: query))
+                    .lineLimit(1)
+                Text(subtitle(for: item))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            if item.isDirectory, !isSelecting {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .modifier(CompactRowTap(item: item, isSelecting: isSelecting, open: actions.open))
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button("Delete", systemImage: "trash", role: .destructive) { actions.delete([item]) }
+            if !item.isDirectory {
+                Button("Download", systemImage: "square.and.arrow.down") { actions.download([item]) }
+                    .tint(.blue)
+            }
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            Button("Rename", systemImage: "pencil") { actions.rename(item) }
+                .tint(.orange)
+            if item.isDirectory {
+                Button(
+                    actions.isFavorite(item) ? "Unfavorite" : "Favorite",
+                    systemImage: actions.isFavorite(item) ? "star.slash" : "star"
+                ) {
+                    actions.toggleFavorite(item)
+                }
+                .tint(.yellow)
+            }
+        }
+        .contextMenu {
+            FileSelectionMenu(items: [item], actions: actions)
+        }
+        .draggableRemoteFile(item, backend: backend)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(item.name)
+        .accessibilityValue(item.isDirectory ? "Folder" : item.kindDescription)
+    }
+
+    private func subtitle(for item: RemoteItem) -> String {
+        var parts: [String] = []
+        if showLocation {
+            parts.append(item.enclosingFolder)
+        }
+        if !item.isDirectory {
+            parts.append(item.formattedSize)
+        }
+        parts.append(item.formattedModified(relative: relativeDates))
+        return parts.joined(separator: " · ")
+    }
+}
+
+// While selecting, the List owns the tap so it can tick the row; otherwise a tap opens.
+private struct CompactRowTap: ViewModifier {
+    let item: RemoteItem
+    let isSelecting: Bool
+    let open: (RemoteItem) -> Void
+
+    func body(content: Content) -> some View {
+        if isSelecting {
+            content
+        } else {
+            content.onTapGesture { open(item) }
+        }
+    }
+}
+
+#endif
 
 private struct FileSelectionMenu: View {
     let items: [RemoteItem]
