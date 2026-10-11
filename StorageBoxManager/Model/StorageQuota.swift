@@ -38,6 +38,33 @@ enum ConflictDecision: Equatable, Sendable {
     case skip
 }
 
+enum UploadConflictPolicy: String, CaseIterable, Identifiable, Sendable {
+    case ask
+    case skip
+    case keepBoth
+    case replace
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .ask: String(localized: "Ask")
+        case .skip: String(localized: "Skip")
+        case .keepBoth: String(localized: "Keep Both")
+        case .replace: String(localized: "Replace")
+        }
+    }
+
+    var decision: ConflictDecision? {
+        switch self {
+        case .ask: nil
+        case .skip: .skip
+        case .keepBoth: .keepBoth
+        case .replace: .replace
+        }
+    }
+}
+
 struct ConflictPrompt: Identifiable, Equatable {
     let id = UUID()
     let name: String

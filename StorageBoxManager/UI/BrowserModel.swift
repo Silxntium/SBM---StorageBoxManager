@@ -419,11 +419,22 @@ final class BrowserModel {
         let target = path
         var directories: [RemotePath] = []
         var files: [PlannedUpload] = []
+        var sourceFolderRoots: [URL] = []
 
         for url in urls {
             let claimed = url.startAccessingSecurityScopedResource()
             defer { if claimed { url.stopAccessingSecurityScopedResource() } }
-            collectUploads(from: url, remoteParent: target, root: url, relative: [], directories: &directories, files: &files)
+            let isFolder = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+            if isFolder { sourceFolderRoots.append(url) }
+            collectUploads(
+                from: url,
+                remoteParent: target,
+                root: url,
+                sourceFolderRoot: isFolder ? url : nil,
+                relative: [],
+                directories: &directories,
+                files: &files
+            )
         }
 
         var seen = Set<RemotePath>()
@@ -448,7 +459,10 @@ final class BrowserModel {
             }
 
             var namesByParent: [RemotePath: Set<String>] = [:]
-            var applied: ConflictDecision?
+            let conflictPolicy = UploadConflictPolicy(
+                rawValue: UserDefaults.standard.string(forKey: TransferQueue.uploadConflictPolicyKey) ?? ""
+            ) ?? .ask
+            var applied = conflictPolicy.decision
             var uploads: [PlannedUpload] = []
             var replaceError: (any Error)?
             for file in files {
@@ -499,7 +513,8 @@ final class BrowserModel {
                             localURL: file.localURL,
                             destination: parent.appending(newName),
                             displayName: file.displayName,
-                            root: file.root
+                            root: file.root,
+                            sourceFolderRoot: file.sourceFolderRoot
                         )
                         namesByParent[parent]?.insert(newName)
                     }
@@ -515,7 +530,17 @@ final class BrowserModel {
                     boxID: box.id,
                     boxName: box.resolvedName,
                     displayName: file.displayName,
-                    securityScopedRoot: file.root
+                    securityScopedRoot: file.root,
+                    deleteSourceAfterUpload: UserDefaults.standard.bool(
+                        forKey: TransferQueue.deleteSourceAfterUploadKey
+                    ),
+                    moveSourceToTrash: UserDefaults.standard.object(
+                        forKey: TransferQueue.moveSourceToTrashKey
+                    ) as? Bool ?? true,
+                    removeEmptySourceFolders: UserDefaults.standard.bool(
+                        forKey: TransferQueue.removeEmptySourceFoldersKey
+                    ),
+                    sourceFolderRoot: file.sourceFolderRoot
                 ) { [weak self] in
                     guard let self else { return }
                     self.invalidateCache(for: target)
@@ -526,6 +551,19 @@ final class BrowserModel {
             }
 
             if uploads.isEmpty, !uniqueDirectories.isEmpty {
+                let defaults = UserDefaults.standard
+                if folderError == nil,
+                   defaults.bool(forKey: TransferQueue.deleteSourceAfterUploadKey),
+                   defaults.bool(forKey: TransferQueue.removeEmptySourceFoldersKey) {
+                    do {
+                        try TransferQueue.cleanupEmptyUploadFolders(
+                            sourceFolderRoots,
+                            moveToTrash: defaults.object(forKey: TransferQueue.moveSourceToTrashKey) as? Bool ?? true
+                        )
+                    } catch {
+                        folderError = error
+                    }
+                }
                 invalidateCache(for: target)
                 scheduleRefresh()
             }
@@ -685,6 +723,7 @@ final class BrowserModel {
         let destination: RemotePath
         let displayName: String
         let root: URL
+        let sourceFolderRoot: URL?
     }
 
     private struct PlannedDownload {
@@ -773,6 +812,7 @@ final class BrowserModel {
         from url: URL,
         remoteParent: RemotePath,
         root: URL,
+        sourceFolderRoot: URL?,
         relative: [String],
         directories: inout [RemotePath],
         files: inout [PlannedUpload]
@@ -803,6 +843,7 @@ final class BrowserModel {
                     from: child,
                     remoteParent: remoteDirectory,
                     root: root,
+                    sourceFolderRoot: sourceFolderRoot,
                     relative: relative + [name],
                     directories: &directories,
                     files: &files
@@ -817,7 +858,8 @@ final class BrowserModel {
                 localURL: url,
                 destination: destination,
                 displayName: (relative + [name]).joined(separator: "/"),
-                root: root
+                root: root,
+                sourceFolderRoot: sourceFolderRoot
             )
         )
     }

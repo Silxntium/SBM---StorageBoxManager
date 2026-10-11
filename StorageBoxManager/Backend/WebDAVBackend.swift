@@ -28,8 +28,12 @@ struct WebDAVBackend: StorageBackend {
         authorization = "Basic " + Data(credentials.utf8).base64EncodedString()
 
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 45
+        // This is an idle interval, not the total transfer duration. A busy Storage Box can stop
+        // acknowledging a multi-gigabyte upload for longer than 45 seconds, especially when
+        // several transfers share the connection. Keep the separate 24-hour resource ceiling.
+        configuration.timeoutIntervalForRequest = 5 * 60
         configuration.timeoutIntervalForResource = 24 * 60 * 60
+        configuration.waitsForConnectivity = true
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.urlCache = nil
         configuration.httpShouldSetCookies = false

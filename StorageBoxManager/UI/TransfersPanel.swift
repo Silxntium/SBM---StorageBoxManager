@@ -89,7 +89,7 @@ private struct TransferRow: View {
                         .lineLimit(1)
                 }
 
-                if transfer.state == .running || transfer.state == .waiting {
+                if transfer.showsProgress {
                     if let fraction = transfer.fractionCompleted {
                         ProgressView(value: fraction)
                             .progressViewStyle(.linear)
@@ -104,7 +104,7 @@ private struct TransferRow: View {
                         .font(.caption)
                         .foregroundStyle(isFailed ? Color.red : .secondary)
                         .lineLimit(2)
-                    if let fraction = transfer.fractionCompleted, transfer.state == .running {
+                    if let fraction = transfer.fractionCompleted, transfer.state == .running, transfer.showsProgress {
                         Spacer(minLength: 8)
                         Text(fraction, format: .percent.precision(.fractionLength(0)))
                             .font(.caption.monospacedDigit())

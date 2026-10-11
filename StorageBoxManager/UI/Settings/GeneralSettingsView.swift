@@ -3,6 +3,11 @@ import SwiftUI
 struct GeneralSettingsView: View {
     @AppStorage("foldersFirst") private var foldersFirst = true
     @AppStorage("relativeDates") private var relativeDates = true
+    @AppStorage(TransferQueue.deleteSourceAfterUploadKey) private var deleteSourceAfterUpload = false
+    @AppStorage(TransferQueue.moveSourceToTrashKey) private var moveSourceToTrash = true
+    @AppStorage(TransferQueue.removeEmptySourceFoldersKey) private var removeEmptySourceFolders = false
+    @AppStorage(TransferQueue.concurrentTransferCountKey) private var concurrentTransferCount = 3
+    @AppStorage(TransferQueue.uploadConflictPolicyKey) private var uploadConflictPolicy = UploadConflictPolicy.ask.rawValue
 
     #if os(macOS)
     @State private var folderURL = DownloadFolderStore.resolve()
@@ -34,9 +39,39 @@ struct GeneralSettingsView: View {
                 Text("These are defaults for boxes you open next. A browser that's already open keeps the last choice you made there.")
                 #endif
             }
+
+            Section {
+                Toggle("Delete source files after upload", isOn: $deleteSourceAfterUpload)
+                #if os(macOS)
+                Toggle("Move to Trash instead of deleting", isOn: $moveSourceToTrash)
+                    .padding(.leading)
+                    .disabled(!deleteSourceAfterUpload)
+                #endif
+                Toggle("Remove empty source folders", isOn: $removeEmptySourceFolders)
+                    .padding(.leading)
+                    .disabled(!deleteSourceAfterUpload)
+
+                Stepper(value: $concurrentTransferCount, in: 1...6) {
+                    LabeledContent("Concurrent transfers", value: concurrentTransferCount.formatted())
+                }
+
+                Picker("When a file already exists", selection: $uploadConflictPolicy) {
+                    ForEach(UploadConflictPolicy.allCases) { policy in
+                        Text(policy.title).tag(policy.rawValue)
+                    }
+                }
+            } header: {
+                Text("Uploads")
+            } footer: {
+                #if os(macOS)
+                Text("Before source cleanup, the app confirms the upload succeeded, verifies the remote size, and checks that the local file did not change. Trash cleanup can be undone; permanent deletion cannot.")
+                #else
+                Text("Before permanent source deletion, the app confirms the upload succeeded, verifies the remote size, and checks that the local file did not change. Deletion cannot be undone.")
+                #endif
+            }
         }
         .formStyle(.grouped)
-        .sheetFrame(width: 520, height: 280)
+        .sheetFrame(width: 560, height: 560)
         #if !os(macOS)
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)

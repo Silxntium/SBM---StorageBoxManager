@@ -28,6 +28,12 @@ final class Transfer: Identifiable {
         var isActive: Bool { self == .waiting || self == .running }
     }
 
+    enum Phase: Equatable, Sendable {
+        case transferring
+        case verifying
+        case cleaning(moveToTrash: Bool)
+    }
+
     let id = UUID()
     let kind: Kind
     let name: String
@@ -37,6 +43,7 @@ final class Transfer: Identifiable {
     var bytesDone: Int64 = 0
     var bytesTotal: Int64 = -1 // -1 = server hasn't told us the total yet
     var state: State = .waiting
+    var phase: Phase = .transferring
     var bytesPerSecond: Double?
 
     private var rateSamples: [(Date, Int64)] = []
@@ -57,6 +64,17 @@ final class Transfer: Identifiable {
 
     func prepareForRetry() {
         state = .waiting
+        phase = .transferring
+        bytesDone = 0
+        bytesTotal = -1
+        bytesPerSecond = nil
+        rateSamples.removeAll()
+    }
+
+    func beginPhase(_ phase: Phase) {
+        self.phase = phase
+        bytesDone = 0
+        bytesTotal = -1
         bytesPerSecond = nil
         rateSamples.removeAll()
     }
@@ -91,6 +109,7 @@ final class Transfer: Identifiable {
 
     var rateDescription: String? {
         guard state == .running else { return nil }
+        if case .cleaning = phase { return nil }
         var parts: [String] = []
         if let formattedSpeed { parts.append(formattedSpeed) }
         if let formattedETA { parts.append(formattedETA) }
@@ -101,6 +120,12 @@ final class Transfer: Identifiable {
         switch state {
         case .waiting:
             String(localized: "Waiting")
+        case .running where phase == .verifying:
+            String(localized: "Verifying upload…")
+        case .running where phase == .cleaning(moveToTrash: true):
+            String(localized: "Moving source to Trash…")
+        case .running where phase == .cleaning(moveToTrash: false):
+            String(localized: "Deleting verified source…")
         case .running where bytesTotal > 0:
             "\(bytesDone.formatted(.byteCount(style: .file))) of \(bytesTotal.formatted(.byteCount(style: .file)))"
         case .running:
@@ -111,6 +136,14 @@ final class Transfer: Identifiable {
             String(localized: "Cancelled")
         case .failed(let message):
             message
+        }
+    }
+
+    var showsProgress: Bool {
+        guard state.isActive else { return false }
+        switch phase {
+        case .transferring, .verifying: return true
+        case .cleaning: return false
         }
     }
 
